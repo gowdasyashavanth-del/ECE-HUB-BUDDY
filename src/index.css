@@ -1,0 +1,109 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─────────────────────────────────────────────────────────────────
+   Theme tokens (Light / Dark / Eye Care)
+   ─────────────────────────────────────────────────────────────────
+   :root holds the LIGHT values — these are also the values every
+   element outside the authenticated app (the login/portal-selection
+   page, which lives outside AppShell) always sees, regardless of
+   which in-app theme is active, since only AppShell's root element
+   gets a [data-theme] attribute.
+
+   Dark and Eye Care simply override the same variables on that one
+   scoped wrapper; every page/component inside AppShell already
+   builds its colors from these tokens (bg-paper, bg-panel, text-ink,
+   text-inkmuted, border-line, copper/trace/danger accents), so
+   nothing else needed to change per-page for theming to reach the
+   whole app. Values are "R G B" triplets so Tailwind's opacity
+   modifiers (e.g. bg-panel/60) keep working. */
+:root {
+  --color-paper: 243 246 244; /* #F3F6F4 */
+  --color-panel: 255 255 255; /* #FFFFFF */
+  --color-ink: 22 35 58; /* #16233A */
+  --color-inkmuted: 75 90 114; /* #4B5A72 */
+  --color-line: 216 223 218; /* #D8DFDA */
+  --color-copper: 199 116 42; /* #C7742A */
+  --color-copper-dark: 168 95 31; /* #A85F1F */
+  --color-copper-light: 240 224 206; /* #F0E0CE */
+  --color-trace: 14 136 120; /* #0E8878 */
+  --color-trace-dark: 11 109 96; /* #0B6D60 */
+  --color-trace-light: 220 239 236; /* #DCEFEC */
+  --color-danger: 179 64 42; /* #B3402A */
+}
+
+/* DARK — deep charcoal/navy, restrained cool accents. Intentionally
+   not pure black (#000): a slightly lifted charcoal reads as premium
+   iOS/macOS dark UI rather than an OLED-saver screen, and gives cards
+   room to sit one step lighter than the page background. */
+[data-theme="dark"] {
+  --color-paper: 13 17 23; /* #0D1117 */
+  --color-panel: 22 27 36; /* #161B24 */
+  --color-ink: 226 231 238; /* #E2E7EE */
+  --color-inkmuted: 148 160 178; /* #94A0B2 */
+  --color-line: 38 45 58; /* #262D3A — solid, just a touch lighter than panel */
+  --color-copper: 224 141 74; /* #E08D4A */
+  --color-copper-dark: 245 176 112; /* #F5B070 — lighter than DEFAULT: used as *text* on dark panels, mirrors how copper-dark is the higher-contrast variant in light mode */
+  --color-copper-light: 58 42 28; /* #3A2A1C — dark tint used as badge/avatar backgrounds */
+  --color-trace: 56 176 150; /* #38B096 */
+  --color-trace-dark: 130 214 191; /* #82D6BF */
+  --color-trace-light: 20 40 38; /* #142826 */
+  --color-danger: 224 110 90; /* #E06E5A */
+}
+
+/* EYE CARE — warm charcoal/brown-gray/cream, low blue content, for
+   long study sessions. Same structure as Dark, shifted warm: paper
+   and panel lean brown rather than navy, text leans cream rather than
+   cool white, and the "success" accent (trace) is pulled from a
+   cooler teal toward a warm sage so nothing blue-leaning survives. */
+[data-theme="eyecare"] {
+  --color-paper: 30 26 20; /* #1E1A14 */
+  --color-panel: 42 36 28; /* #2A241C */
+  --color-ink: 232 220 200; /* #E8DCC8 */
+  --color-inkmuted: 176 158 132; /* #B09E84 */
+  --color-line: 62 54 42; /* #3E362A — solid, warm hairline */
+  --color-copper: 214 148 82; /* #D69452 */
+  --color-copper-dark: 236 180 120; /* #ECB478 */
+  --color-copper-light: 58 44 28; /* #3A2C1C */
+  --color-trace: 150 168 110; /* #96A86E — warm sage, not teal */
+  --color-trace-dark: 190 204 150; /* #BECC96 */
+  --color-trace-light: 40 40 26; /* #28281A */
+  --color-danger: 214 110 90; /* #D66E5A */
+}
+
+body {
+  @apply bg-paper text-ink;
+}
+
+/* Theme changes should feel like a soft cross-fade, not a hard cut. */
+[data-theme] {
+  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-theme] {
+    transition: none;
+  }
+}
+
+
+/* Gentle entrance for the login card — subtle by design. */
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Respect reduced-motion preference (per the accessibility quality floor) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

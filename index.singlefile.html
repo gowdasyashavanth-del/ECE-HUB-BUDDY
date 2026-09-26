@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ECE Hub Buddy</title>
+    <script>
+      // Must run here, as a plain classic script, not inside
+      // main.singlefile.tsx: ES module imports always evaluate before
+      // any of the importing module's own top-level code, and the
+      // import chain from main.singlefile.tsx (App -> ... ->
+      // supabaseClient.ts) creates the Supabase client at module-load
+      // time. That client's GoTrueClient constructor synchronously
+      // calls `new URL(window.location.href)` once on startup (to check
+      // for an OAuth/magic-link callback, unconditionally, with no
+      // try/catch) before any code inside main.singlefile.tsx — module
+      // or otherwise — has a chance to run. Placing the shim here, as a
+      // classic script before the module script tag, guarantees it
+      // patches window.URL first. This app has no OAuth/magic-link flow
+      // (email/password only — see AuthContext.tsx), so there is never
+      // anything real to detect from the URL anyway; this only stops
+      // that internal assumption from crashing the whole app before
+      // React can render, in embedding contexts where
+      // window.location.href isn't a normal parseable URL.
+      //
+      // Deliberately broad: rather than only handling the one exact
+      // call pattern this was written for, ANY failed URL construction
+      // falls back to a safe synthetic URL instead of throwing. A
+      // narrower, exact-match condition risks missing slightly
+      // different call shapes (different argument counts, a relative
+      // path instead of the exact location string, etc.) in whichever
+      // specific non-standard environment this file gets opened in.
+      (function () {
+        try {
+          var NativeURL = window.URL;
+          var FALLBACK = "https://app.invalid/";
+          function SafeURL(url, base) {
+            try {
+              return arguments.length < 2 ? new NativeURL(url) : new NativeURL(url, base);
+            } catch (err) {
+              try {
+                return new NativeURL(String(url), base !== undefined ? base : FALLBACK);
+              } catch (err2) {
+                return new NativeURL(FALLBACK);
+              }
+            }
+          }
+          SafeURL.prototype = NativeURL.prototype;
+          if (NativeURL.createObjectURL) SafeURL.createObjectURL = NativeURL.createObjectURL.bind(NativeURL);
+          if (NativeURL.revokeObjectURL) SafeURL.revokeObjectURL = NativeURL.revokeObjectURL.bind(NativeURL);
+          try {
+            Object.defineProperty(window, "URL", { value: SafeURL, writable: true, configurable: true });
+          } catch (defineErr) {
+            window.URL = SafeURL;
+          }
+        } catch (shimErr) {
+          // If the shim itself can't install for some reason, don't let
+          // that be the thing that breaks the page — fall through and
+          // let the app attempt to load normally.
+        }
+      })();
+
+      // Last-resort visibility net: if something still crashes before
+      // React can render (whether the shim above covers it or not),
+      // show what actually failed directly on the page instead of
+      // leaving a blank screen with only a devtools-console error. This
+      // makes any future failure in an unusual embedding context
+      // immediately diagnosable from a screenshot alone.
+      window.addEventListener("error", function (event) {
+        var root = document.getElementById("root");
+        if (!root || root.childElementCount > 0) return; // React already mounted something
+        var info = {
+          message: event.message,
+          "window.location.href": (function () { try { return window.location.href; } catch (e) { return "[threw: " + e + "]"; } })(),
+          "document.baseURI": (function () { try { return document.baseURI; } catch (e) { return "[threw: " + e + "]"; } })(),
+          "window.location.protocol": (function () { try { return window.location.protocol; } catch (e) { return "[threw: " + e + "]"; } })(),
+        };
+        root.innerHTML =
+          '<div style="font-family: monospace; padding: 24px; white-space: pre-wrap; font-size: 13px; color: #b00;">' +
+          "ECE Hub Buddy failed to start in this environment.\n\n" +
+          JSON.stringify(info, null, 2) +
+          "\n\nTry opening this file in a regular mobile/desktop browser (or via a local HTTP server) instead of an in-app preview." +
+          "</div>";
+      });
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.singlefile.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,15 @@
+node_modules
+dist
+dist-singlefile
+.env
+*.local
+.DS_Store
+*.tsbuildinfo
+.tsbuild-node/
+# A stale compiled vite.config.js/.d.ts sitting next to vite.config.ts
+# silently wins config resolution over the .ts file (Vite tries .js
+# first) and was the exact cause of a hard-to-see bug where edits to
+# vite.config.ts were built but never actually applied. Never commit
+# these; delete them on sight if `tsc -b`/an IDE ever regenerates them.
+/vite.config.js
+/vite.config.d.ts
