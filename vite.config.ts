@@ -18,7 +18,7 @@ export default defineConfig({
       // applyUpdate) is then handled with the plain browser Service
       // Worker API in src/hooks/usePWAUpdate.ts, not the virtual module.
       injectRegister: "script",
-      includeAssets: ["icons/apple-touch-icon.png"],
+      includeAssets: ["icons/apple-touch-icon.png", "favicon.ico", "favicon-16.png", "favicon-32.png", "favicon-48.png"],
       manifest: {
         name: "ECE Hub Buddy",
         short_name: "ECE Hub Buddy",
