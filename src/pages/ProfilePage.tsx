@@ -4,6 +4,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { PageHeader } from "../components/ui/PageHeader";
 import { usePWAInstall } from "../hooks/usePWAInstall";
 import { IOSInstallGuide } from "../components/pwa/IOSInstallGuide";
+import { ChangePasswordSection } from "../components/account/ChangePasswordSection";
 
 // avatars bucket facts (verified live against Supabase, not assumed
 // from the migration file): PUBLIC bucket, 5MB limit, allowed_mime_types
@@ -253,6 +254,8 @@ export function ProfilePage() {
           {saving ? "Saving…" : "Save changes"}
         </button>
         </form>
+
+        <ChangePasswordSection />
 
         <ProfileInstallSection />
       </div>
