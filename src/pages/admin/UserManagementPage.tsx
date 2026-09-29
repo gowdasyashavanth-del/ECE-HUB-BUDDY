@@ -55,6 +55,10 @@ function emptyTeacherForm() {
   return { full_name: "", email: "", phone: "", employee_id: "", temp_password: "", yearId: "", regId: "", progId: "", semId: "", sectionId: "", subjectId: "" };
 }
 
+function emptyEditForm() {
+  return { full_name: "", usn: "", yearId: "", regId: "", progId: "", semId: "", sectionId: "" };
+}
+
 export function UserManagementPage() {
   const [tab, setTab] = useState<"student" | "teacher">("student");
   const [showForm, setShowForm] = useState(false);
@@ -79,6 +83,14 @@ export function UserManagementPage() {
   const [submitting, setSubmitting] = useState(false);
   const [successNote, setSuccessNote] = useState<string | null>(null);
   const [rowNote, setRowNote] = useState<string | null>(null);
+
+  // Edit Student — profile fields + academic reassignment only. Never
+  // touches role, email, or password: those stay Reset Password /
+  // Demote's job, unchanged.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState(emptyEditForm());
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editSubmitting, setEditSubmitting] = useState(false);
 
   async function loadAll() {
     if (!supabase) return;
@@ -144,6 +156,16 @@ export function UserManagementPage() {
     [sections, form.semId, form.yearId]
   );
   const filteredSubjects = useMemo(() => subjects.filter((s) => s.semester_id === form.semId), [subjects, form.semId]);
+
+  // Same cascading-filter shape as the Add form above, scoped to
+  // editForm instead of the tab's add-form state.
+  const editFilteredRegs = useMemo(() => regs.filter((r) => r.academic_year_id === editForm.yearId), [regs, editForm.yearId]);
+  const editFilteredPrograms = useMemo(() => programs.filter((p) => p.regulation_id === editForm.regId), [programs, editForm.regId]);
+  const editFilteredSemesters = useMemo(() => semesters.filter((s) => s.program_id === editForm.progId), [semesters, editForm.progId]);
+  const editFilteredSections = useMemo(
+    () => sections.filter((s) => s.semester_id === editForm.semId && s.academic_year_id === editForm.yearId),
+    [sections, editForm.semId, editForm.yearId]
+  );
 
   function breadcrumb(sectionId: string, semesterId: string): string {
     const sec = sections.find((s) => s.id === sectionId);
@@ -260,6 +282,92 @@ export function UserManagementPage() {
       return;
     }
     setRowNote(`${user.full_name || user.email} demoted to student.`);
+    await loadAll();
+  }
+
+  // Derive the full Year → Regulation → Program chain from a student's
+  // current assignment row, by walking the already-loaded reference
+  // lists — avoids widening the student_assignments select() or
+  // duplicating the hierarchy elsewhere.
+  function openEditStudent(u: UserRow) {
+    const assignment = studentAssignments.find((a) => a.student_id === u.id);
+    const sec = assignment ? sections.find((s) => s.id === assignment.section_id) : undefined;
+    const sem = assignment ? semesters.find((s) => s.id === assignment.semester_id) : undefined;
+    const prog = sem ? programs.find((p) => p.id === sem.program_id) : undefined;
+    const reg = prog ? regs.find((r) => r.id === prog.regulation_id) : undefined;
+
+    setEditForm({
+      full_name: u.full_name ?? "",
+      usn: u.usn ?? "",
+      yearId: reg?.academic_year_id ?? "",
+      regId: reg?.id ?? "",
+      progId: prog?.id ?? "",
+      semId: sem?.id ?? "",
+      sectionId: sec?.id ?? "",
+    });
+    setEditError(null);
+    setEditingId(u.id);
+  }
+
+  function closeEditStudent() {
+    setEditingId(null);
+    setEditForm(emptyEditForm());
+    setEditError(null);
+  }
+
+  async function handleSaveEditStudent(u: UserRow) {
+    if (!supabase) return;
+    setEditError(null);
+    if (!editForm.full_name.trim()) return setEditError("Full name is required.");
+    if (!editForm.yearId || !editForm.regId || !editForm.progId || !editForm.semId || !editForm.sectionId) {
+      return setEditError("Select the full academic chain.");
+    }
+
+    setEditSubmitting(true);
+
+    const { error: profileErr } = await supabase
+      .from("users")
+      .update({ full_name: editForm.full_name.trim(), usn: editForm.usn.trim() || null })
+      .eq("id", u.id);
+    if (profileErr) {
+      setEditSubmitting(false);
+      setEditError(friendlyDbError(profileErr, "Student"));
+      return;
+    }
+
+    // Only touch student_assignments if the section actually changed —
+    // reuses the exact end-current/insert-new pattern StudentAssignmentsPage
+    // already uses, so history is preserved the same way everywhere, and
+    // the one-current-assignment-per-student unique index is never violated.
+    const current = studentAssignments.find((a) => a.student_id === u.id && a.is_current);
+    if (!current || current.section_id !== editForm.sectionId) {
+      if (current) {
+        const { error } = await supabase.from("student_assignments").update({ is_current: false }).eq("student_id", u.id).eq("is_current", true);
+        if (error) {
+          setEditSubmitting(false);
+          setEditError(friendlyDbError(error, "Assignment"));
+          return;
+        }
+      }
+      const { error } = await supabase.from("student_assignments").insert({
+        student_id: u.id,
+        academic_year_id: editForm.yearId,
+        regulation_id: editForm.regId,
+        program_id: editForm.progId,
+        semester_id: editForm.semId,
+        section_id: editForm.sectionId,
+        is_current: true,
+      });
+      if (error) {
+        setEditSubmitting(false);
+        setEditError(friendlyDbError(error, "Assignment"));
+        return;
+      }
+    }
+
+    setEditSubmitting(false);
+    setRowNote(`${editForm.full_name.trim()} updated.`);
+    closeEditStudent();
     await loadAll();
   }
 
@@ -453,6 +561,120 @@ export function UserManagementPage() {
 
       {!loading && !loadError && (
         <>
+          {editingId && (
+            <div className="mb-6 rounded-lg border border-line bg-panel p-4">
+              {(() => {
+                const u = users.find((x) => x.id === editingId);
+                if (!u) return null;
+                return (
+                  <>
+                    <p className="mb-3 font-display text-sm font-semibold text-ink">Edit Student — {u.email}</p>
+                    {editError && <p className="mb-3 rounded-md bg-danger/10 px-3 py-2 text-sm text-danger">{editError}</p>}
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className={labelClass}>Full Name</label>
+                        <input
+                          className={inputClass}
+                          value={editForm.full_name}
+                          onChange={(e) => setEditForm((f) => ({ ...f, full_name: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <label className={labelClass}>USN (optional)</label>
+                        <input
+                          className={inputClass}
+                          value={editForm.usn}
+                          onChange={(e) => setEditForm((f) => ({ ...f, usn: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+
+                    <p className="mb-1 mt-4 font-display text-sm font-semibold text-ink">Academic Assignment</p>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <div>
+                        <label className={labelClass}>Academic Year</label>
+                        <select
+                          className={inputClass}
+                          value={editForm.yearId}
+                          onChange={(e) => setEditForm((f) => ({ ...f, yearId: e.target.value, regId: "", progId: "", semId: "", sectionId: "" }))}
+                        >
+                          <option value="">Select…</option>
+                          {years.map((y) => <option key={y.id} value={y.id}>{y.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelClass}>Regulation</label>
+                        <select
+                          className={inputClass}
+                          value={editForm.regId}
+                          onChange={(e) => setEditForm((f) => ({ ...f, regId: e.target.value, progId: "", semId: "", sectionId: "" }))}
+                          disabled={!editForm.yearId}
+                        >
+                          <option value="">Select…</option>
+                          {editFilteredRegs.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelClass}>Program</label>
+                        <select
+                          className={inputClass}
+                          value={editForm.progId}
+                          onChange={(e) => setEditForm((f) => ({ ...f, progId: e.target.value, semId: "", sectionId: "" }))}
+                          disabled={!editForm.regId}
+                        >
+                          <option value="">Select…</option>
+                          {editFilteredPrograms.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelClass}>Semester</label>
+                        <select
+                          className={inputClass}
+                          value={editForm.semId}
+                          onChange={(e) => setEditForm((f) => ({ ...f, semId: e.target.value, sectionId: "" }))}
+                          disabled={!editForm.progId}
+                        >
+                          <option value="">Select…</option>
+                          {editFilteredSemesters.map((s) => <option key={s.id} value={s.id}>{s.name || `Semester ${s.number}`}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelClass}>Section</label>
+                        <select
+                          className={inputClass}
+                          value={editForm.sectionId}
+                          onChange={(e) => setEditForm((f) => ({ ...f, sectionId: e.target.value }))}
+                          disabled={!editForm.semId}
+                        >
+                          <option value="">Select…</option>
+                          {editFilteredSections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex gap-2">
+                      <button
+                        onClick={() => handleSaveEditStudent(u)}
+                        disabled={editSubmitting}
+                        className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-white hover:bg-copper-dark disabled:opacity-60"
+                      >
+                        {editSubmitting ? "Saving…" : "Save changes"}
+                      </button>
+                      <button
+                        onClick={closeEditStudent}
+                        disabled={editSubmitting}
+                        className="rounded-md border border-line px-4 py-2 text-sm font-medium text-ink hover:border-copper disabled:opacity-60"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
           <div className="mb-3">
             <input
               className={inputClass}
@@ -505,6 +727,14 @@ export function UserManagementPage() {
                         <td className="px-3 py-2 text-xs text-inkmuted">{new Date(u.created_at).toLocaleDateString()}</td>
                         <td className="px-3 py-2">
                           <div className="flex flex-wrap gap-2">
+                            {tab === "student" && (
+                              <button
+                                onClick={() => openEditStudent(u)}
+                                className="rounded-md border border-line px-2 py-1 text-xs font-medium text-ink hover:border-copper"
+                              >
+                                Edit
+                              </button>
+                            )}
                             <Link
                               to={tab === "student" ? `/admin/student-assignments?student=${u.id}` : "/admin/teacher-assignments"}
                               className="rounded-md border border-line px-2 py-1 text-xs font-medium text-ink hover:border-copper"
