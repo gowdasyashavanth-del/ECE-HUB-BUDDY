@@ -102,6 +102,20 @@ export function PortalSelectionPage() {
     // anywhere ProtectedRoute wouldn't already allow for their role.
   }, [profile, awaitingProfile]);
 
+  // Safety net for any password-reset email sent before the redirect
+  // target was pointed at /reset-password: a recovery link's tokens
+  // must never be evaluated by the "already signed in" check below —
+  // forward them to the dedicated recovery route intact instead, before
+  // that check ever runs. New reset emails already link straight to
+  // /reset-password (see AuthContext.resetPassword) and never hit this.
+  const isRecoveryLink =
+    window.location.hash.includes("type=recovery") ||
+    new URLSearchParams(window.location.search).get("type") === "recovery" ||
+    new URLSearchParams(window.location.search).has("code");
+  if (isRecoveryLink) {
+    return <Navigate to={`/reset-password${window.location.search}${window.location.hash}`} replace />;
+  }
+
   // Already signed in — skip straight to the correct dashboard.
   if (session && profile) {
     return <Navigate to={dashboardPathForRole(profile.role)} replace />;

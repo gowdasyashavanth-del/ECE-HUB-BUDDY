@@ -4,6 +4,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { ConfigNeededPage } from "./pages/ConfigNeededPage";
 import { PortalSelectionPage } from "./pages/PortalSelectionPage";
+import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { PortalLoginPage } from "./pages/PortalLoginPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { NotFoundPage } from "./pages/NotFoundPage";
@@ -72,6 +73,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<PortalSelectionPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/student/login" element={<PortalLoginPage expectedRole="student" />} />
         <Route path="/teacher/login" element={<PortalLoginPage expectedRole="teacher" />} />
         <Route path="/admin/login" element={<PortalLoginPage expectedRole="super_admin" />} />

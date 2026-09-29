@@ -239,8 +239,13 @@ export function UserManagementPage() {
   async function handleResetPassword(email: string) {
     if (!supabase) return;
     setRowNote(null);
+    // Same recovery route the self-service "Forgot password?" flow uses
+    // (AuthContext.resetPassword) — the emailed link must land on the
+    // dedicated reset screen, not /login, or an already-signed-in
+    // browser would bounce the recipient straight to a dashboard instead
+    // of letting them set a new password.
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/login`,
+      redirectTo: `${window.location.origin}/reset-password`,
     });
     setRowNote(error ? error.message : `Password reset email sent to ${email}.`);
   }

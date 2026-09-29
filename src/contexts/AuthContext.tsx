@@ -102,10 +102,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // `users` table, RLS, or roles. Supabase always returns a generic
   // success response here regardless of whether the email exists, so
   // this never leaks whether an account is registered.
+  //
+  // redirectTo points at the dedicated recovery route, NOT /login: the
+  // emailed link must land somewhere whose only job is finishing a
+  // password reset, so it can never be caught by /login's "already
+  // signed in → go to dashboard" redirect (see ResetPasswordPage.tsx).
   const resetPassword = useCallback(async (email: string) => {
     if (!supabase) return { error: "Supabase is not configured yet." };
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/login`,
+      redirectTo: `${window.location.origin}/reset-password`,
     });
     return { error: error ? error.message : null };
   }, []);

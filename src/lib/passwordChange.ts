@@ -9,6 +9,27 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const MIN_PASSWORD_LENGTH = 8;
 
+// Shared by both the Profile "Change password" form (with a current-
+// password field) and the recovery "Reset password" form (no current
+// password — the recovery session itself is the proof of identity).
+// One rule set, so the two forms can never silently drift apart.
+export function validateNewPassword(next: string, confirm: string): Pick<FieldErrors, "next" | "confirm"> {
+  const errors: Pick<FieldErrors, "next" | "confirm"> = {};
+  if (!next) {
+    errors.next = "Enter a new password.";
+  } else if (next.length < MIN_PASSWORD_LENGTH) {
+    errors.next = `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
+  } else if (!/[A-Za-z]/.test(next) || !/[0-9]/.test(next)) {
+    errors.next = "Include at least one letter and one number.";
+  }
+  if (!confirm) {
+    errors.confirm = "Confirm your new password.";
+  } else if (next && confirm !== next) {
+    errors.confirm = "The passwords don't match.";
+  }
+  return errors;
+}
+
 export interface PasswordFields {
   current: string;
   next: string;
@@ -21,19 +42,13 @@ export type FieldErrors = Partial<Record<keyof PasswordFields, string>>;
 export function validatePasswordChange(f: PasswordFields): FieldErrors {
   const errors: FieldErrors = {};
   if (!f.current) errors.current = "Enter your current password.";
-  if (!f.next) {
-    errors.next = "Enter a new password.";
-  } else if (f.next.length < MIN_PASSWORD_LENGTH) {
-    errors.next = `Use at least ${MIN_PASSWORD_LENGTH} characters.`;
-  } else if (!/[A-Za-z]/.test(f.next) || !/[0-9]/.test(f.next)) {
-    errors.next = "Include at least one letter and one number.";
-  } else if (f.current && f.next === f.current) {
+  const { next, confirm } = validateNewPassword(f.next, f.confirm);
+  if (next) errors.next = next;
+  if (confirm) errors.confirm = confirm;
+  // Only flag "must differ" once the new password is otherwise valid —
+  // otherwise a too-short password could get two overlapping messages.
+  if (!errors.next && f.current && f.next === f.current) {
     errors.next = "Your new password must be different from your current one.";
-  }
-  if (!f.confirm) {
-    errors.confirm = "Confirm your new password.";
-  } else if (f.next && f.confirm !== f.next) {
-    errors.confirm = "The passwords don't match.";
   }
   return errors;
 }
@@ -133,6 +148,33 @@ export async function changeOwnPassword(
     await client.auth.signOut({ scope: "others" });
   } catch {
     // non-fatal: the password change itself already succeeded
+  }
+
+  return { ok: true };
+}
+
+// Password-RECOVERY completion. The recovery session itself (established
+// from the emailed link) is the proof of identity here — there is no
+// "current password" to re-verify, unlike changeOwnPassword above.
+export async function completePasswordRecovery(
+  client: SupabaseClient,
+  newPassword: string
+): Promise<ChangeResult> {
+  try {
+    const { error } = await client.auth.updateUser({ password: newPassword });
+    if (error) return mapUpdateError(error);
+  } catch {
+    return { ok: false, message: "Network problem. Check your connection and try again." };
+  }
+
+  // The recovery session was only ever meant to last long enough to set
+  // a new password — end it (and any other lingering session for this
+  // account) so the user comes back through a normal login with the
+  // password they just chose, exactly as the flow is meant to end.
+  try {
+    await client.auth.signOut();
+  } catch {
+    // non-fatal: the password update itself already succeeded
   }
 
   return { ok: true };
