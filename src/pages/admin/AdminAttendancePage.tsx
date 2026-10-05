@@ -27,7 +27,6 @@ interface AuditRow {
   changed_at: string;
 }
 
-const first = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? v[0] ?? null : v ?? null);
 
 export function AdminAttendancePage() {
   const [tab, setTab] = useState<"records" | "audit">("records");

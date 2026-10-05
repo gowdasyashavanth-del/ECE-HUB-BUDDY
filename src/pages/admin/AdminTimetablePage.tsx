@@ -5,7 +5,7 @@ import { PageHeader } from "../../components/ui/PageHeader";
 import { LoadingState } from "../../components/ui/LoadingState";
 import { ErrorState } from "../../components/ui/ErrorState";
 import { EmptyState } from "../../components/ui/EmptyState";
-import { SUGGESTED_SLOTS, DAY_NAMES, DAY_SHORT, rangesOverlap } from "../../lib/timetableSlots";
+import { SUGGESTED_SLOTS, DAY_NAMES, DAY_SHORT, rangesOverlap, timeToMinutes } from "../../lib/timetableSlots";
 
 interface Year { id: string; name: string; }
 interface Reg { id: string; name: string; academic_year_id: string; }
@@ -226,23 +226,41 @@ export function AdminTimetablePage() {
     }
 
     const others = allEntries.filter((e) => e.id !== form.id && e.day_of_week === form.day_of_week);
+    const timeClash = (e: Entry) => rangesOverlap(form.start_time, form.end_time, e.start_time, e.end_time);
+
+    const exact = others.find(
+      (e) => e.section_id === sectionId && e.start_time.slice(0, 5) === form.start_time && e.end_time.slice(0, 5) === form.end_time &&
+        e.subject_id === (form.subject_id || null) && e.teacher_id === (form.teacher_id || null) &&
+        (e.room ?? "").trim().toLowerCase() === form.room.trim().toLowerCase() &&
+        e.lab_batch_id === (form.block_type === "lab" ? form.lab_batch_id || null : null) && e.block_type === form.block_type
+    );
+    if (exact) {
+      setFormError("A timetable entry with these exact details already exists.");
+      return;
+    }
+    const newBatch = form.block_type === "lab" ? form.lab_batch_id || null : null;
+    const sectionClash = others.find(
+      (e) => e.section_id === sectionId && timeClash(e) && (e.lab_batch_id === null || newBatch === null || e.lab_batch_id === newBatch)
+    );
+    if (sectionClash) {
+      setFormError(`This section already has a class during this time (${sectionClash.start_time.slice(0, 5)}–${sectionClash.end_time.slice(0, 5)}).`);
+      return;
+    }
 
     if (form.teacher_id) {
-      const clash = others.find(
-        (e) => e.teacher_id === form.teacher_id && rangesOverlap(form.start_time, form.end_time, e.start_time, e.end_time)
-      );
+      const clash = others.find((e) => e.teacher_id === form.teacher_id && timeClash(e));
       if (clash) {
-        setFormError(`Schedule conflict: this teacher is already assigned during this time (${clash.start_time}–${clash.end_time}).`);
+        setFormError(`This teacher is already assigned during this time (${clash.start_time.slice(0, 5)}–${clash.end_time.slice(0, 5)}).`);
         return;
       }
     }
     if (form.room.trim()) {
       const roomNorm = form.room.trim().toLowerCase();
       const clash = others.find(
-        (e) => (e.room ?? "").trim().toLowerCase() === roomNorm && rangesOverlap(form.start_time, form.end_time, e.start_time, e.end_time)
+        (e) => (e.room ?? "").trim().toLowerCase() === roomNorm && timeClash(e)
       );
       if (clash) {
-        setFormError(`Schedule conflict: this room is already occupied during this time (${clash.start_time}–${clash.end_time}).`);
+        setFormError(`This room is already occupied during this time (${clash.start_time.slice(0, 5)}–${clash.end_time.slice(0, 5)}).`);
         return;
       }
     }
@@ -253,7 +271,8 @@ export function AdminTimetablePage() {
       semester_id: semId,
       section_id: sectionId,
       day_of_week: form.day_of_week,
-      period_order: form.period_order,
+      // derived from the actual start time at save time (display ordering only; no longer part of any constraint)
+      period_order: Math.max(1, Math.floor(timeToMinutes(form.start_time) / 5) + 1),
       start_time: form.start_time,
       end_time: form.end_time,
       subject_id: form.subject_id || null,
@@ -274,6 +293,10 @@ export function AdminTimetablePage() {
       }
     }
     const { error } = await supabase.from("timetable_entries").insert(payload);
+    if (error && form.id) {
+      // Edit is end-old + insert-new; if the insert is rejected, put the old entry back.
+      await supabase.from("timetable_entries").update({ is_current: true }).eq("id", form.id);
+    }
     setSaving(false);
     if (error) {
       setFormError(friendlyDbError(error, "Timetable entry"));
