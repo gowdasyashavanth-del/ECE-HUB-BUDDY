@@ -11,6 +11,10 @@ import { NotFound, ProgressBar, SectionCard } from "./StudyParts";
 const BUCKET = "content-files"; // the existing private bucket — signed URLs only
 
 interface ContentRow { id: string; title: string; type: string; file_url: string | null; external_url: string | null }
+// Notes are found via the Option B mapping:
+//   academic topic → note_chapters.topic_id → notes.note_chapter_id
+// A note_chapter without a topic_id mapping is intentionally invisible
+// in Study Mode (it still appears in /student/notes).
 interface NoteRow { id: string; title: string; file_path: string; file_size_bytes: number | null }
 interface FormulaRow { id: string; name: string; expression: string; description: string | null; example: string | null }
 interface TestRow { id: string; title: string; duration_min: number }
@@ -63,17 +67,27 @@ export function StudyWorkspace({ topicId, focus }: { topicId: string; focus: Stu
       const context = c.data;
 
       // 2. Resources — every query runs under the existing RLS.
-      const [con, nts, fTopic, fGen, tTopic, tSubj] = await Promise.all([
+      // Notes: use Option B mapping — find note_chapters whose topic_id
+      // matches this academic topic, then find notes for those chapters.
+      const [con, chps, fTopic, fGen, tTopic, tSubj] = await Promise.all([
         client.from("content").select("id, title, type, file_url, external_url").eq("topic_id", topicId).order("created_at"),
-        client.from("notes").select("id, title, file_path, file_size_bytes").eq("topic_id", topicId).order("created_at"),
+        client.from("note_chapters").select("id").eq("topic_id", topicId),
         client.from("formulas").select("id, name, expression, description, example").eq("topic_id", topicId).order("name"),
         client.from("formulas").select("id, name, expression, description, example").eq("subject_id", context.subject_id).is("topic_id", null).order("name"),
         client.from("tests").select("id, title, duration_min").eq("topic_id", topicId).order("created_at"),
         client.from("tests").select("id, title, duration_min").eq("subject_id", context.subject_id).order("created_at"),
       ]);
       if (cancelled) return;
-      const firstErr = [con, nts, fTopic, fGen, tTopic, tSubj].find((r) => r.error)?.error;
+      const firstErr = [con, chps, fTopic, fGen, tTopic, tSubj].find((r) => r.error)?.error;
       if (firstErr) { setError(friendlyDbError(firstErr, "this topic's resources")); setStatus("error"); return; }
+
+      // Fetch notes for the mapped chapters (empty array when no chapters are mapped).
+      const chapterIds = (chps.data ?? []).map((c: { id: string }) => c.id);
+      const nts = chapterIds.length > 0
+        ? await client.from("notes").select("id, title, file_path, file_size_bytes").in("note_chapter_id", chapterIds).order("created_at")
+        : { data: [], error: null };
+      if (cancelled) return;
+      if (nts.error) { setError(friendlyDbError(nts.error, "notes")); setStatus("error"); return; }
 
       const contentRows = (con.data ?? []) as ContentRow[];
       const testRows = [...((tTopic.data ?? []) as TestRow[]), ...((tSubj.data ?? []) as TestRow[])];
