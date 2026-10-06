@@ -10,42 +10,37 @@ import { EmptyState } from "../ui/EmptyState";
 interface SectionRow { id: string; name: string; semester_id: string; semesterNumber: number | null; }
 interface SubjectRow { id: string; name: string; code: string | null; semester_id: string; }
 interface UnitRow { id: string; name: string; subject_id: string; }
-interface TopicRow { id: string; name: string; unit_id: string; }
+// Notes-specific chapter entity — NOT the academic syllabus Topic.
+interface NoteChapterRow {
+  id: string;
+  name: string;
+  unit_id: string;
+  subject_id: string;
+  topic_id: string | null;   // optional Study Mode mapping
+  display_order: number;
+}
 interface NoteRow {
-  id: string; section_id: string; subject_id: string; topic_id: string;
+  id: string; section_id: string; subject_id: string; note_chapter_id: string;
   title: string; file_path: string; file_size_bytes: number | null;
   uploaded_by_name: string | null; uploaded_by_role: string | null; created_at: string;
 }
 interface Pair { sectionId: string; subjectId: string; }
 
-// Notes live in the SAME private `content-files` bucket as the rest of
-// Learning Content, under a distinct `notes/` path prefix:
-//   notes/{section_id}/{subject_id}/{topic_id}/{uuid}-{filename}.pdf
-// Every read/write against that prefix is gated by the notes_manager()/
-// notes_viewer() DB functions (see the Notes Module migration) — this
-// component's own filtering below is a UX convenience only, same
-// relationship ContentManager already has with the generic `content`
-// table's RLS.
+// Notes live in the private `content-files` bucket under a `notes/` prefix:
+//   notes/{section_id}/{subject_id}/{note_chapter_id}/{uuid}-{filename}.pdf
+// Every read/write is gated by notes_manager()/notes_viewer() DB functions.
 const BUCKET = "content-files";
 const MAX_BYTES = 50 * 1024 * 1024;
 
 function sanitizeFilename(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
-
 function formatBytes(n: number | null): string {
   if (!n) return "—";
   return `${(n / (1024 * 1024)).toFixed(1)}MB`;
 }
 
 // One component, used at both /admin/notes and /teacher/notes.
-// Admin: every section/subject combination is offered (subject to the
-// two belonging to the same semester). Teacher: only the exact
-// section+subject combinations they're actually assigned to
-// (teacher_assignments), plus — for any section where they are the
-// CURRENT class teacher — every subject in that section's semester.
-// This filtering is UX only; the database re-checks the identical
-// authorization (notes_manager()) on every write regardless.
 export function NotesManager() {
   const { profile } = useAuth();
   const isAdmin = profile?.role === "super_admin";
@@ -55,7 +50,7 @@ export function NotesManager() {
   const [sections, setSections] = useState<SectionRow[]>([]);
   const [subjects, setSubjects] = useState<SubjectRow[]>([]);
   const [units, setUnits] = useState<UnitRow[]>([]);
-  const [topics, setTopics] = useState<TopicRow[]>([]);
+  const [noteChapters, setNoteChapters] = useState<NoteChapterRow[]>([]);
   const [pairs, setPairs] = useState<Pair[]>([]); // teacher-only: allowed (section,subject) combos
   const [classTeacherSectionIds, setClassTeacherSectionIds] = useState<string[]>([]);
   const [notes, setNotes] = useState<NoteRow[]>([]);
@@ -67,7 +62,7 @@ export function NotesManager() {
   const [fSectionId, setFSectionId] = useState("");
   const [fSubjectId, setFSubjectId] = useState("");
   const [fUnitId, setFUnitId] = useState("");
-  const [fTopicId, setFTopicId] = useState("");
+  const [fNoteChapterId, setFNoteChapterId] = useState("");
   const [fTitle, setFTitle] = useState("");
   const [fFile, setFFile] = useState<File | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -75,6 +70,12 @@ export function NotesManager() {
   const [uploadLabel, setUploadLabel] = useState<string | null>(null);
   const [rowActionError, setRowActionError] = useState<string | null>(null);
   const [viewingId, setViewingId] = useState<string | null>(null);
+
+  // Inline chapter creation state
+  const [creatingChapter, setCreatingChapter] = useState(false);
+  const [newChapterName, setNewChapterName] = useState("");
+  const [chapterSaving, setChapterSaving] = useState(false);
+  const [chapterError, setChapterError] = useState<string | null>(null);
 
   async function loadAll() {
     if (!supabase || !profile) return;
@@ -127,9 +128,7 @@ export function NotesManager() {
       }
       setClassTeacherSectionIds(ctSectionIds);
 
-      // Class-teacher sections can use ANY subject in that section's
-      // semester — fetch those subjects too, same as notes_manager()
-      // grants server-side.
+      // Class-teacher sections can use ANY subject in that section's semester.
       const ctSemesterIds = Array.from(new Set(
         ctSectionIds.map((id) => sectionMap.get(id)?.semester_id).filter((v): v is string => !!v)
       ));
@@ -153,30 +152,30 @@ export function NotesManager() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.id, isAdmin]);
 
-  // Second pass: units/topics/notes for whichever sections we ended up
-  // with (kept separate so re-running it doesn't require re-fetching
-  // the section/subject pool above).
-  async function loadUnitsTopicsNotes() {
-    if (!supabase || subjects.length === 0) { setUnits([]); setTopics([]); setNotes([]); return; }
+  // Second pass: units, note_chapters, and notes for the loaded subjects/sections.
+  async function loadUnitsChaptersNotes() {
+    if (!supabase || subjects.length === 0) { setUnits([]); setNoteChapters([]); setNotes([]); return; }
     const subjectIds = subjects.map((s) => s.id);
-    const { data: unitRows, error: unitErr } = await supabase.from("units").select("id, name, subject_id").in("subject_id", subjectIds);
+
+    const { data: unitRows, error: unitErr } = await supabase
+      .from("units").select("id, name, subject_id").in("subject_id", subjectIds);
     if (unitErr) { setLoadError(friendlyDbError(unitErr, "Units")); return; }
     setUnits(unitRows ?? []);
 
-    const unitIds = (unitRows ?? []).map((u) => u.id);
-    let topicRows: TopicRow[] = [];
-    if (unitIds.length > 0) {
-      const { data, error } = await supabase.from("topics").select("id, name, unit_id").in("unit_id", unitIds);
-      if (error) { setLoadError(friendlyDbError(error, "Chapters")); return; }
-      topicRows = data ?? [];
-    }
-    setTopics(topicRows);
+    // Load Notes-specific chapters (NOT academic topics).
+    const { data: chapterRows, error: chapterErr } = await supabase
+      .from("note_chapters")
+      .select("id, name, unit_id, subject_id, topic_id, display_order")
+      .in("subject_id", subjectIds)
+      .order("display_order");
+    if (chapterErr) { setLoadError(friendlyDbError(chapterErr, "Chapters")); return; }
+    setNoteChapters((chapterRows ?? []) as NoteChapterRow[]);
 
     const sectionIds = sections.map((s) => s.id);
     if (sectionIds.length === 0) { setNotes([]); return; }
     const { data: noteRows, error: noteErr } = await supabase
       .from("notes")
-      .select("id, section_id, subject_id, topic_id, title, file_path, file_size_bytes, uploaded_by_name, uploaded_by_role, created_at")
+      .select("id, section_id, subject_id, note_chapter_id, title, file_path, file_size_bytes, uploaded_by_name, uploaded_by_role, created_at")
       .in("section_id", sectionIds)
       .order("created_at", { ascending: false });
     if (noteErr) { setLoadError(friendlyDbError(noteErr, "Notes")); return; }
@@ -184,7 +183,7 @@ export function NotesManager() {
   }
 
   useEffect(() => {
-    if (!loading) loadUnitsTopicsNotes();
+    if (!loading) loadUnitsChaptersNotes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, sections, subjects]);
 
@@ -209,7 +208,8 @@ export function NotesManager() {
   }, [sections, pairs, classTeacherSectionIds, isAdmin]);
 
   const unitsForSubject = (subjectId: string) => units.filter((u) => u.subject_id === subjectId);
-  const topicsForUnit = (unitId: string) => topics.filter((t) => t.unit_id === unitId);
+  const chaptersForUnit = (unitId: string) =>
+    noteChapters.filter((c) => c.unit_id === unitId).sort((a, b) => a.display_order - b.display_order);
 
   function sectionLabel(id: string): string {
     const s = sections.find((x) => x.id === id);
@@ -219,8 +219,8 @@ export function NotesManager() {
   function subjectLabel(id: string): string {
     return subjects.find((s) => s.id === id)?.name ?? "—";
   }
-  function topicLabel(id: string): string {
-    return topics.find((t) => t.id === id)?.name ?? "—";
+  function chapterLabel(id: string): string {
+    return noteChapters.find((c) => c.id === id)?.name ?? "—";
   }
 
   const visibleNotes = useMemo(() => {
@@ -230,23 +230,44 @@ export function NotesManager() {
 
   function openCreate() {
     setEditingId(null);
-    setFSectionId(""); setFSubjectId(""); setFUnitId(""); setFTopicId("");
+    setFSectionId(""); setFSubjectId(""); setFUnitId(""); setFNoteChapterId("");
     setFTitle(""); setFFile(null);
     setFormError(null);
+    setCreatingChapter(false); setNewChapterName(""); setChapterError(null);
     setFormOpen(true);
   }
 
   function openEdit(row: NoteRow) {
-    const topic = topics.find((t) => t.id === row.topic_id);
+    const chapter = noteChapters.find((c) => c.id === row.note_chapter_id);
     setEditingId(row.id);
     setFSectionId(row.section_id);
     setFSubjectId(row.subject_id);
-    setFUnitId(topic?.unit_id ?? "");
-    setFTopicId(row.topic_id);
+    setFUnitId(chapter?.unit_id ?? "");
+    setFNoteChapterId(row.note_chapter_id);
     setFTitle(row.title);
     setFFile(null);
     setFormError(null);
+    setCreatingChapter(false); setNewChapterName(""); setChapterError(null);
     setFormOpen(true);
+  }
+
+  // Inline chapter creation (teachers and admins only).
+  async function handleCreateChapter() {
+    if (!supabase || !fSubjectId || !fUnitId || !newChapterName.trim()) return;
+    setChapterError(null);
+    setChapterSaving(true);
+    const existingOrder = chaptersForUnit(fUnitId).length;
+    const { data, error } = await supabase
+      .from("note_chapters")
+      .insert({ subject_id: fSubjectId, unit_id: fUnitId, name: newChapterName.trim(), display_order: existingOrder })
+      .select("id, name, unit_id, subject_id, topic_id, display_order")
+      .single();
+    setChapterSaving(false);
+    if (error) { setChapterError(friendlyDbError(error, "Chapter")); return; }
+    setNoteChapters((prev) => [...prev, data as NoteChapterRow]);
+    setFNoteChapterId((data as NoteChapterRow).id);
+    setNewChapterName("");
+    setCreatingChapter(false);
   }
 
   async function handleSubmit() {
@@ -255,7 +276,7 @@ export function NotesManager() {
     if (!editingId) {
       if (!fSectionId) return setFormError("Select a section.");
       if (!fSubjectId) return setFormError("Select a subject.");
-      if (!fTopicId) return setFormError("Select a chapter.");
+      if (!fNoteChapterId) return setFormError("Select a chapter.");
     }
     if (!fTitle.trim()) return setFormError("Title is required.");
     if (!editingId && !fFile) return setFormError("Choose a PDF file to upload.");
@@ -277,7 +298,8 @@ export function NotesManager() {
       let newPath: string | null = null;
       if (fFile) {
         setUploadLabel("Uploading replacement file…");
-        newPath = `notes/${existing.section_id}/${existing.subject_id}/${existing.topic_id}/${crypto.randomUUID()}-${sanitizeFilename(fFile.name)}`;
+        // New file uses note_chapter_id path.
+        newPath = `notes/${existing.section_id}/${existing.subject_id}/${existing.note_chapter_id}/${crypto.randomUUID()}-${sanitizeFilename(fFile.name)}`;
         const { error: upErr } = await supabase.storage.from(BUCKET).upload(newPath, fFile, { contentType: "application/pdf", upsert: false });
         if (upErr) { setSaving(false); setUploadLabel(null); setFormError(`Upload failed: ${upErr.message}`); return; }
         file_path = newPath;
@@ -287,35 +309,26 @@ export function NotesManager() {
       setSaving(false);
       setUploadLabel(null);
       if (error) {
-        // Row update failed — clean up the just-uploaded replacement
-        // (not the still-referenced original) so no orphaned file is
-        // left behind, and the note row keeps pointing at a file that
-        // actually exists.
         if (newPath) await supabase.storage.from(BUCKET).remove([newPath]);
         setFormError(friendlyDbError(error, "Notes"));
         return;
       }
-      // Only delete the OLD file once the row is confirmed pointing at
-      // the new one — deleting it earlier risked leaving the note
-      // pointing at a file that no longer exists if this update had
-      // failed.
       if (newPath) await supabase.storage.from(BUCKET).remove([existing.file_path]);
     } else {
-
       setUploadLabel("Uploading file…");
-      const path = `notes/${fSectionId}/${fSubjectId}/${fTopicId}/${crypto.randomUUID()}-${sanitizeFilename(fFile!.name)}`;
+      // New notes always use note_chapter_id as the path segment.
+      const path = `notes/${fSectionId}/${fSubjectId}/${fNoteChapterId}/${crypto.randomUUID()}-${sanitizeFilename(fFile!.name)}`;
       const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, fFile!, { contentType: "application/pdf", upsert: false });
       if (upErr) { setSaving(false); setUploadLabel(null); setFormError(`Upload failed: ${upErr.message}`); return; }
 
       const { error } = await supabase.from("notes").insert({
-        section_id: fSectionId, subject_id: fSubjectId, topic_id: fTopicId,
+        section_id: fSectionId, subject_id: fSubjectId, note_chapter_id: fNoteChapterId,
         title: fTitle.trim(), file_path: path, file_size_bytes: fFile!.size,
         uploaded_by: profile.id,
       });
       setSaving(false);
       setUploadLabel(null);
       if (error) {
-        // Row rejected (e.g. RLS/trigger) — clean up the orphaned file.
         await supabase.storage.from(BUCKET).remove([path]);
         setFormError(friendlyDbError(error, "Notes"));
         return;
@@ -323,7 +336,7 @@ export function NotesManager() {
     }
 
     setFormOpen(false);
-    await loadUnitsTopicsNotes();
+    await loadUnitsChaptersNotes();
   }
 
   async function handleDelete(row: NoteRow) {
@@ -333,7 +346,7 @@ export function NotesManager() {
     const { error } = await supabase.from("notes").delete().eq("id", row.id);
     if (error) { setRowActionError(friendlyDbError(error, "Notes")); return; }
     await supabase.storage.from(BUCKET).remove([row.file_path]);
-    await loadUnitsTopicsNotes();
+    await loadUnitsChaptersNotes();
   }
 
   async function handleView(row: NoteRow) {
@@ -395,7 +408,7 @@ export function NotesManager() {
                   <select
                     value={fSectionId}
                     disabled={!!editingId}
-                    onChange={(e) => { setFSectionId(e.target.value); setFSubjectId(""); setFUnitId(""); setFTopicId(""); }}
+                    onChange={(e) => { setFSectionId(e.target.value); setFSubjectId(""); setFUnitId(""); setFNoteChapterId(""); setCreatingChapter(false); }}
                     className={selectClass}
                   >
                     <option value="">Select…</option>
@@ -407,7 +420,7 @@ export function NotesManager() {
                   <select
                     value={fSubjectId}
                     disabled={!!editingId || !fSectionId}
-                    onChange={(e) => { setFSubjectId(e.target.value); setFUnitId(""); setFTopicId(""); }}
+                    onChange={(e) => { setFSubjectId(e.target.value); setFUnitId(""); setFNoteChapterId(""); setCreatingChapter(false); }}
                     className={selectClass}
                   >
                     <option value="">{fSectionId ? "Select…" : "Select section first"}</option>
@@ -419,7 +432,7 @@ export function NotesManager() {
                   <select
                     value={fUnitId}
                     disabled={!!editingId || !fSubjectId}
-                    onChange={(e) => { setFUnitId(e.target.value); setFTopicId(""); }}
+                    onChange={(e) => { setFUnitId(e.target.value); setFNoteChapterId(""); setCreatingChapter(false); }}
                     className={selectClass}
                   >
                     <option value="">{fSubjectId ? "Select…" : "Select subject first"}</option>
@@ -427,18 +440,57 @@ export function NotesManager() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-inkmuted">Chapter (Topic)</label>
+                  <label className="block text-xs font-medium text-inkmuted">Chapter</label>
                   <select
-                    value={fTopicId}
+                    value={fNoteChapterId}
                     disabled={!!editingId || !fUnitId}
-                    onChange={(e) => setFTopicId(e.target.value)}
+                    onChange={(e) => { setFNoteChapterId(e.target.value); setCreatingChapter(false); setChapterError(null); }}
                     className={selectClass}
                   >
                     <option value="">{fUnitId ? "Select…" : "Select unit first"}</option>
-                    {topicsForUnit(fUnitId).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    {chaptersForUnit(fUnitId).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
-                  {fUnitId && topicsForUnit(fUnitId).length === 0 && (
-                    <p className="mt-1 text-xs text-inkmuted">No chapters exist for this unit yet.</p>
+                  {/* Allow teachers and admins to create a new chapter inline */}
+                  {fUnitId && !editingId && (
+                    <div className="mt-1.5">
+                      {!creatingChapter ? (
+                        <button
+                          type="button"
+                          onClick={() => { setCreatingChapter(true); setChapterError(null); }}
+                          className="text-xs text-copper-dark hover:underline"
+                        >
+                          + Create new chapter
+                        </button>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <input
+                            value={newChapterName}
+                            onChange={(e) => setNewChapterName(e.target.value)}
+                            placeholder="Chapter name…"
+                            className="flex-1 rounded-md border border-line bg-panel px-2 py-1 text-xs text-ink focus:border-copper focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleCreateChapter}
+                            disabled={chapterSaving || !newChapterName.trim()}
+                            className="rounded-md bg-copper px-2 py-1 text-xs font-medium text-white hover:bg-copper-dark disabled:opacity-60"
+                          >
+                            {chapterSaving ? "…" : "Create"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setCreatingChapter(false); setNewChapterName(""); setChapterError(null); }}
+                            className="rounded-md border border-line px-2 py-1 text-xs text-ink hover:border-copper"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+                      {chapterError && <p className="mt-1 text-xs text-danger">{chapterError}</p>}
+                      {fUnitId && chaptersForUnit(fUnitId).length === 0 && !creatingChapter && (
+                        <p className="mt-1 text-xs text-inkmuted">No chapters yet — create one above.</p>
+                      )}
+                    </div>
                   )}
                 </div>
                 <div className="sm:col-span-2">
@@ -495,7 +547,7 @@ export function NotesManager() {
                     <tr key={row.id} className="border-b border-line last:border-b-0">
                       <td className="px-4 py-2.5 font-medium text-ink">{row.title}</td>
                       <td className="px-4 py-2.5 text-xs text-inkmuted">{sectionLabel(row.section_id)}</td>
-                      <td className="px-4 py-2.5 text-xs text-inkmuted">{subjectLabel(row.subject_id)} · {topicLabel(row.topic_id)}</td>
+                      <td className="px-4 py-2.5 text-xs text-inkmuted">{subjectLabel(row.subject_id)} · {chapterLabel(row.note_chapter_id)}</td>
                       <td className="px-4 py-2.5 text-xs text-inkmuted">{formatBytes(row.file_size_bytes)}</td>
                       <td className="px-4 py-2.5 text-xs text-inkmuted">
                         {row.uploaded_by_name || "—"}{row.uploaded_by_role ? ` (${row.uploaded_by_role === "super_admin" ? "Super Admin" : row.uploaded_by_role === "teacher" ? "Teacher" : "CR"})` : ""}
