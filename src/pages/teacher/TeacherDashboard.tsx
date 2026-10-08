@@ -7,7 +7,7 @@ import { PageHeader } from "../../components/ui/PageHeader";
 import { LoadingState } from "../../components/ui/LoadingState";
 import { ErrorState } from "../../components/ui/ErrorState";
 import { EmptyState } from "../../components/ui/EmptyState";
-import { DAY_SHORT } from "../../lib/timetableSlots";
+import { DAY_SHORT, formatTimeRange12 } from "../../lib/timetableSlots";
 
 interface AssignmentRow {
   id: string;
@@ -162,7 +162,7 @@ export function TeacherDashboard() {
                   const isMine = e.teacher_id === profile.id;
                   return (
                     <div key={e.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-panel px-3 py-2 text-sm">
-                      <span className="font-mono text-xs text-inkmuted">{e.start_time}–{e.end_time}</span>
+                      <span className="font-mono text-xs text-inkmuted">{formatTimeRange12(e.start_time, e.end_time)}</span>
                       <span className={isMine ? "font-medium text-ink" : "text-inkmuted"}>
                         {e.block_type === "break" ? (e.label || "Break") : (subjectNames[e.subject_id ?? ""] ?? e.label ?? "—")}
                       </span>

@@ -5,7 +5,17 @@ import { PageHeader } from "../../components/ui/PageHeader";
 import { LoadingState } from "../../components/ui/LoadingState";
 import { ErrorState } from "../../components/ui/ErrorState";
 import { EmptyState } from "../../components/ui/EmptyState";
-import { SUGGESTED_SLOTS, DAY_NAMES, DAY_SHORT, rangesOverlap, timeToMinutes } from "../../lib/timetableSlots";
+import {
+  SUGGESTED_SLOTS,
+  OFFICIAL_TIMETABLE_COLUMNS,
+  PERIOD_SLOTS,
+  TIMETABLE_DAYS,
+  DAY_NAMES,
+  DAY_SHORT,
+  rangesOverlap,
+  timeToMinutes,
+  formatTimeRange12,
+} from "../../lib/timetableSlots";
 
 interface Year { id: string; name: string; }
 interface Reg { id: string; name: string; academic_year_id: string; }
@@ -33,7 +43,7 @@ interface Entry {
 }
 
 const BLOCK_TYPES = ["lecture", "lab", "activity", "break", "other"] as const;
-const DAYS = [1, 2, 3, 4, 5, 6]; // Monday..Saturday (Sunday supported by schema, not shown by default)
+const DAYS = TIMETABLE_DAYS; // Monday..Saturday [1, 2, 3, 4, 5, 6]
 
 type FormState = {
   id: string | null; // null = new entry
@@ -67,11 +77,6 @@ const emptyForm = (day: number, start: string, end: string, period: number): For
 
 const selectCls = "mt-1 w-full rounded-md border border-line bg-paper px-2.5 py-1.5 text-sm text-ink";
 
-// Reuses timetable_entries exactly as designed in Phase 16A/24 — this
-// page never invents a parallel schedule model. Every write goes
-// through this one table; history is preserved by ending the current
-// row (is_current=false) and inserting a fresh one rather than
-// mutating a row's subject/teacher/time in place.
 export function AdminTimetablePage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -85,7 +90,7 @@ export function AdminTimetablePage() {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [teacherAssignments, setTeacherAssignments] = useState<TA[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
-  const [allEntries, setAllEntries] = useState<Entry[]>([]); // ALL current entries, needed for teacher/room overlap checks across sections
+  const [allEntries, setAllEntries] = useState<Entry[]>([]); // ALL current entries across sections for overlap checking
 
   const [yearId, setYearId] = useState("");
   const [regId, setRegId] = useState("");
@@ -157,18 +162,14 @@ export function AdminTimetablePage() {
     return teachers.filter((t) => ids.includes(t.id));
   }, [teacherAssignments, teachers, sectionId, form?.subject_id]);
 
-  const gridRows = useMemo(() => {
-    const seen = new Map<string, { start: string; end: string }>();
-    sectionEntries.forEach((e) => seen.set(`${e.start_time}-${e.end_time}`, { start: e.start_time, end: e.end_time }));
-    return Array.from(seen.values()).sort((a, b) => a.start.localeCompare(b.start));
-  }, [sectionEntries]);
-
-  function entriesFor(day: number, start: string, end: string) {
-    return sectionEntries.filter((e) => e.day_of_week === day && e.start_time === start && e.end_time === end);
+  function entriesForSlot(day: number, start: string, end: string) {
+    return sectionEntries.filter(
+      (e) => e.day_of_week === day && rangesOverlap(e.start_time.slice(0, 5), e.end_time.slice(0, 5), start, end)
+    );
   }
 
   function openAdd(day: number, start = "09:00", end = "09:55") {
-    setForm(emptyForm(day, start, end, gridRows.length + 1));
+    setForm(emptyForm(day, start, end, PERIOD_SLOTS.length + 1));
     setFormError(null);
   }
 
@@ -176,8 +177,8 @@ export function AdminTimetablePage() {
     setForm({
       id: e.id,
       day_of_week: e.day_of_week,
-      start_time: e.start_time,
-      end_time: e.end_time,
+      start_time: e.start_time.slice(0, 5),
+      end_time: e.end_time.slice(0, 5),
       block_type: e.block_type,
       subject_id: e.subject_id ?? "",
       teacher_id: e.teacher_id ?? "",
@@ -229,10 +230,15 @@ export function AdminTimetablePage() {
     const timeClash = (e: Entry) => rangesOverlap(form.start_time, form.end_time, e.start_time, e.end_time);
 
     const exact = others.find(
-      (e) => e.section_id === sectionId && e.start_time.slice(0, 5) === form.start_time && e.end_time.slice(0, 5) === form.end_time &&
-        e.subject_id === (form.subject_id || null) && e.teacher_id === (form.teacher_id || null) &&
+      (e) =>
+        e.section_id === sectionId &&
+        e.start_time.slice(0, 5) === form.start_time &&
+        e.end_time.slice(0, 5) === form.end_time &&
+        e.subject_id === (form.subject_id || null) &&
+        e.teacher_id === (form.teacher_id || null) &&
         (e.room ?? "").trim().toLowerCase() === form.room.trim().toLowerCase() &&
-        e.lab_batch_id === (form.block_type === "lab" ? form.lab_batch_id || null : null) && e.block_type === form.block_type
+        e.lab_batch_id === (form.block_type === "lab" ? form.lab_batch_id || null : null) &&
+        e.block_type === form.block_type
     );
     if (exact) {
       setFormError("A timetable entry with these exact details already exists.");
@@ -240,27 +246,34 @@ export function AdminTimetablePage() {
     }
     const newBatch = form.block_type === "lab" ? form.lab_batch_id || null : null;
     const sectionClash = others.find(
-      (e) => e.section_id === sectionId && timeClash(e) && (e.lab_batch_id === null || newBatch === null || e.lab_batch_id === newBatch)
+      (e) =>
+        e.section_id === sectionId &&
+        timeClash(e) &&
+        (e.lab_batch_id === null || newBatch === null || e.lab_batch_id === newBatch)
     );
     if (sectionClash) {
-      setFormError(`This section already has a class during this time (${sectionClash.start_time.slice(0, 5)}–${sectionClash.end_time.slice(0, 5)}).`);
+      setFormError(
+        `This section already has a class during this time (${formatTimeRange12(sectionClash.start_time, sectionClash.end_time)}).`
+      );
       return;
     }
 
     if (form.teacher_id) {
       const clash = others.find((e) => e.teacher_id === form.teacher_id && timeClash(e));
       if (clash) {
-        setFormError(`This teacher is already assigned during this time (${clash.start_time.slice(0, 5)}–${clash.end_time.slice(0, 5)}).`);
+        setFormError(
+          `This teacher is already assigned during this time (${formatTimeRange12(clash.start_time, clash.end_time)}).`
+        );
         return;
       }
     }
     if (form.room.trim()) {
       const roomNorm = form.room.trim().toLowerCase();
-      const clash = others.find(
-        (e) => (e.room ?? "").trim().toLowerCase() === roomNorm && timeClash(e)
-      );
+      const clash = others.find((e) => (e.room ?? "").trim().toLowerCase() === roomNorm && timeClash(e));
       if (clash) {
-        setFormError(`This room is already occupied during this time (${clash.start_time.slice(0, 5)}–${clash.end_time.slice(0, 5)}).`);
+        setFormError(
+          `This room is already occupied during this time (${formatTimeRange12(clash.start_time, clash.end_time)}).`
+        );
         return;
       }
     }
@@ -271,7 +284,6 @@ export function AdminTimetablePage() {
       semester_id: semId,
       section_id: sectionId,
       day_of_week: form.day_of_week,
-      // derived from the actual start time at save time (display ordering only; no longer part of any constraint)
       period_order: Math.max(1, Math.floor(timeToMinutes(form.start_time) / 5) + 1),
       start_time: form.start_time,
       end_time: form.end_time,
@@ -294,7 +306,6 @@ export function AdminTimetablePage() {
     }
     const { error } = await supabase.from("timetable_entries").insert(payload);
     if (error && form.id) {
-      // Edit is end-old + insert-new; if the insert is rejected, put the old entry back.
       await supabase.from("timetable_entries").update({ is_current: true }).eq("id", form.id);
     }
     setSaving(false);
@@ -310,20 +321,47 @@ export function AdminTimetablePage() {
     const subject = subjects.find((s) => s.id === e.subject_id);
     const teacher = teachers.find((t) => t.id === e.teacher_id);
     const batch = batches.find((b) => b.id === e.lab_batch_id);
-    if (e.block_type === "break") return e.label || "Break";
-    if (e.block_type === "activity" || e.block_type === "other") return e.label || e.block_type;
+
+    if (e.block_type === "break") {
+      return <span className="font-semibold text-amber-800 dark:text-amber-300">{e.label || "Break"}</span>;
+    }
+    if (e.block_type === "activity" || e.block_type === "other") {
+      return (
+        <div className="flex flex-col items-center justify-center text-center">
+          <span className="font-semibold text-xs text-ink">{e.label || e.block_type}</span>
+          {e.room && <span className="text-[10px] font-mono text-inkmuted mt-0.5">{e.room}</span>}
+        </div>
+      );
+    }
+
+    const subjectDisplay = subject ? (subject.code || subject.name) : (e.label || "—");
+
     return (
-      <>
-        <p className="font-medium">{subject?.name ?? e.label ?? "—"}{batch ? ` · ${batch.name}` : ""}</p>
-        {teacher && <p className="text-inkmuted">{teacher.full_name || teacher.email}</p>}
-        {e.room && <p className="text-inkmuted">{e.room}</p>}
-      </>
+      <div className="flex flex-col items-center justify-center text-center leading-tight py-1 w-full">
+        <div className="font-bold text-xs text-ink tracking-tight">
+          {subjectDisplay}
+          {batch ? <span className="text-[10px] text-copper-dark font-normal"> · {batch.name}</span> : null}
+        </div>
+        {teacher && (
+          <div className="text-[11px] font-medium text-inkmuted mt-1 truncate max-w-full" title={teacher.full_name || teacher.email}>
+            {teacher.full_name || teacher.email}
+          </div>
+        )}
+        {e.room && (
+          <div className="text-[10px] font-mono font-medium text-inkmuted/90 mt-0.5 uppercase tracking-wide">
+            {e.room}
+          </div>
+        )}
+      </div>
     );
   }
 
   return (
     <div>
-      <PageHeader title="Timetable" subtitle="Section-specific schedule, built from teacher_assignments and lab_batches." />
+      <PageHeader
+        title="Timetable"
+        subtitle="Official college schedule grid, dynamically generated from teacher assignments and section entries."
+      />
 
       {loadError && <ErrorState message={loadError} onRetry={loadAll} />}
       {loading && !loadError && <LoadingState label="Loading…" />}
@@ -331,23 +369,65 @@ export function AdminTimetablePage() {
       {!loading && !loadError && (
         <>
           <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-5">
-            <select value={yearId} onChange={(e) => { setYearId(e.target.value); setRegId(""); setProgId(""); setSemId(""); setSectionId(""); }} className={selectCls}>
+            <select
+              value={yearId}
+              onChange={(e) => {
+                setYearId(e.target.value);
+                setRegId("");
+                setProgId("");
+                setSemId("");
+                setSectionId("");
+              }}
+              className={selectCls}
+            >
               <option value="">Academic Year</option>
               {years.map((y) => <option key={y.id} value={y.id}>{y.name}</option>)}
             </select>
-            <select value={regId} onChange={(e) => { setRegId(e.target.value); setProgId(""); setSemId(""); setSectionId(""); }} className={selectCls} disabled={!yearId}>
+            <select
+              value={regId}
+              onChange={(e) => {
+                setRegId(e.target.value);
+                setProgId("");
+                setSemId("");
+                setSectionId("");
+              }}
+              className={selectCls}
+              disabled={!yearId}
+            >
               <option value="">Regulation</option>
               {filteredRegs.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
-            <select value={progId} onChange={(e) => { setProgId(e.target.value); setSemId(""); setSectionId(""); }} className={selectCls} disabled={!regId}>
+            <select
+              value={progId}
+              onChange={(e) => {
+                setProgId(e.target.value);
+                setSemId("");
+                setSectionId("");
+              }}
+              className={selectCls}
+              disabled={!regId}
+            >
               <option value="">Program</option>
               {filteredPrograms.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
-            <select value={semId} onChange={(e) => { setSemId(e.target.value); setSectionId(""); }} className={selectCls} disabled={!progId}>
+            <select
+              value={semId}
+              onChange={(e) => {
+                setSemId(e.target.value);
+                setSectionId("");
+              }}
+              className={selectCls}
+              disabled={!progId}
+            >
               <option value="">Semester</option>
               {filteredSemesters.map((s) => <option key={s.id} value={s.id}>Semester {s.number}</option>)}
             </select>
-            <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} className={selectCls} disabled={!semId}>
+            <select
+              value={sectionId}
+              onChange={(e) => setSectionId(e.target.value)}
+              className={selectCls}
+              disabled={!semId}
+            >
               <option value="">Section</option>
               {filteredSections.map((s) => <option key={s.id} value={s.id}>Section {s.name}</option>)}
             </select>
@@ -364,35 +444,96 @@ export function AdminTimetablePage() {
           ) : (
             <>
               <div className="mb-3 flex justify-end">
-                <button onClick={() => openAdd(1)} className="rounded-md bg-copper px-3 py-1.5 text-sm font-medium text-white hover:bg-copper-dark">
+                <button
+                  onClick={() => openAdd(1)}
+                  className="rounded-md bg-copper px-3 py-1.5 text-sm font-medium text-white hover:bg-copper-dark"
+                >
                   + Add entry
                 </button>
               </div>
 
-              <div className="hidden overflow-x-auto rounded-lg border border-line sm:block">
-                <table className="w-full border-collapse text-xs">
+              {/* Official Academic Timetable Grid (Desktop & Tablet Horizontal Scroll) */}
+              <div className="hidden sm:block overflow-x-auto rounded-xl border border-line bg-panel shadow-xs">
+                <table className="w-full min-w-[980px] border-collapse text-xs">
                   <thead>
-                    <tr>
-                      <th className="border-b border-r border-line bg-paper p-2 text-left text-inkmuted">Time</th>
-                      {DAYS.map((d) => (
-                        <th key={d} className="border-b border-line bg-paper p-2 text-ink">{DAY_SHORT[d]}</th>
-                      ))}
+                    <tr className="bg-paper/70">
+                      <th className="w-28 min-w-[100px] border-b border-r border-line p-2.5 text-center font-bold uppercase tracking-wider text-ink">
+                        DAY
+                      </th>
+                      {OFFICIAL_TIMETABLE_COLUMNS.map((col, idx) => {
+                        if (col.type === "break") {
+                          return (
+                            <th
+                              key={col.label}
+                              className="w-14 min-w-[56px] max-w-[64px] border-b border-r border-line bg-amber-500/10 p-2 text-center"
+                            >
+                              <div className="font-bold text-[11px] text-amber-800 dark:text-amber-300 uppercase tracking-wider">
+                                {col.label}
+                              </div>
+                              <div className="text-[9px] font-medium text-amber-700/80 dark:text-amber-400/80 whitespace-nowrap mt-0.5">
+                                {formatTimeRange12(col.start, col.end)}
+                              </div>
+                            </th>
+                          );
+                        }
+                        return (
+                          <th
+                            key={idx}
+                            className="min-w-[120px] border-b border-r border-line p-2 text-center"
+                          >
+                            <div className="font-semibold text-ink whitespace-nowrap">
+                              {formatTimeRange12(col.start, col.end)}
+                            </div>
+                            <div className="text-[10px] font-medium text-inkmuted uppercase tracking-wider mt-0.5">
+                              {col.label}
+                            </div>
+                          </th>
+                        );
+                      })}
                     </tr>
                   </thead>
                   <tbody>
-                    {gridRows.map((row) => (
-                      <tr key={`${row.start}-${row.end}`}>
-                        <td className="whitespace-nowrap border-r border-b border-line bg-paper p-2 font-mono text-inkmuted">
-                          {row.start}–{row.end}
+                    {DAYS.map((d, dayIdx) => (
+                      <tr key={d} className="hover:bg-paper/20 transition-colors">
+                        {/* Day label column */}
+                        <td className="border-b border-r border-line bg-paper/40 px-3 py-2 text-center font-bold text-ink whitespace-nowrap">
+                          {DAY_NAMES[d]}
                         </td>
-                        {DAYS.map((d) => {
-                          const cellEntries = entriesFor(d, row.start, row.end);
+
+                        {/* Slots */}
+                        {OFFICIAL_TIMETABLE_COLUMNS.map((col, colIdx) => {
+                          if (col.type === "break") {
+                            // The break column spans all 6 day rows vertically
+                            if (dayIdx === 0) {
+                              return (
+                                <td
+                                  key={col.label}
+                                  rowSpan={DAYS.length}
+                                  className="w-14 min-w-[56px] max-w-[64px] border-b border-r border-line bg-amber-500/10 text-center align-middle select-none"
+                                >
+                                  <div className="flex h-full min-h-[380px] flex-col items-center justify-center py-4">
+                                    <span className="font-bold text-[11px] uppercase tracking-widest text-amber-800 dark:text-amber-300 [writing-mode:vertical-rl] rotate-180">
+                                      {col.label}
+                                    </span>
+                                  </div>
+                                </td>
+                              );
+                            }
+                            return null; // Spanned from row 0
+                          }
+
+                          // Regular Period Slot
+                          const cellEntries = entriesForSlot(d, col.start, col.end);
                           return (
-                            <td key={d} className="min-w-[120px] border-b border-line p-1.5 align-top">
+                            <td
+                              key={colIdx}
+                              className="min-w-[120px] max-w-[160px] border-b border-r border-line p-1.5 align-middle"
+                            >
                               {cellEntries.length === 0 ? (
                                 <button
-                                  onClick={() => openAdd(d, row.start, row.end)}
-                                  className="flex h-full w-full items-center justify-center rounded text-inkmuted hover:bg-paper"
+                                  onClick={() => openAdd(d, col.start, col.end)}
+                                  className="flex h-full min-h-[68px] w-full items-center justify-center rounded text-transparent hover:text-inkmuted hover:bg-paper/60 transition-colors text-base font-semibold"
+                                  title={`Add class for ${DAY_NAMES[d]} (${formatTimeRange12(col.start, col.end)})`}
                                 >
                                   +
                                 </button>
@@ -402,7 +543,7 @@ export function AdminTimetablePage() {
                                     <button
                                       key={e.id}
                                       onClick={() => openEdit(e)}
-                                      className={`w-full rounded p-1.5 text-left ${e.block_type === "break" ? "bg-paper text-inkmuted" : "bg-copper-light text-copper-dark"}`}
+                                      className="w-full rounded border border-line/70 bg-paper/60 p-2 text-left hover:border-copper hover:bg-copper-light/20 transition-all shadow-xs"
                                     >
                                       {describeEntry(e)}
                                     </button>
@@ -418,64 +559,119 @@ export function AdminTimetablePage() {
                 </table>
               </div>
 
-              <MobileDayView days={DAYS} rows={gridRows} entriesFor={entriesFor} describeEntry={describeEntry} onAdd={openAdd} />
+              {/* Mobile view with 12-hour formatting and clear break dividers */}
+              <MobileDayView
+                days={DAYS}
+                entriesForSlot={entriesForSlot}
+                describeEntry={describeEntry}
+                onAdd={openAdd}
+                onEdit={openEdit}
+              />
             </>
           )}
         </>
       )}
 
+      {/* Add / Edit Entry Modal */}
       {form && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={() => setForm(null)} aria-hidden="true" />
-          <div role="dialog" aria-modal="true" className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-line bg-panel p-5 shadow-xl">
-            <h2 className="font-display text-lg font-semibold text-ink">{form.id ? "Edit entry" : "Add entry"}</h2>
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-line bg-panel p-5 shadow-xl"
+          >
+            <h2 className="font-display text-lg font-semibold text-ink">
+              {form.id ? "Edit entry" : "Add entry"}
+            </h2>
 
             <label className="mt-3 block text-xs font-medium text-inkmuted">Quick preset (optional)</label>
-            <select onChange={(e) => applyPreset(Number(e.target.value))} defaultValue="" className={selectCls}>
+            <select
+              onChange={(e) => applyPreset(Number(e.target.value))}
+              defaultValue=""
+              className={selectCls}
+            >
               <option value="" disabled>Choose a preset…</option>
               {SUGGESTED_SLOTS.map((p, i) => (
-                <option key={p.label} value={i}>{p.label} ({p.start}–{p.end})</option>
+                <option key={p.label} value={i}>
+                  {p.label} ({formatTimeRange12(p.start, p.end)})
+                </option>
               ))}
             </select>
 
             <div className="mt-3 grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-xs font-medium text-inkmuted">Day</label>
-                <select value={form.day_of_week} onChange={(e) => setForm({ ...form, day_of_week: Number(e.target.value) })} className={selectCls}>
+                <select
+                  value={form.day_of_week}
+                  onChange={(e) => setForm({ ...form, day_of_week: Number(e.target.value) })}
+                  className={selectCls}
+                >
                   {DAYS.map((d) => <option key={d} value={d}>{DAY_NAMES[d]}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-xs font-medium text-inkmuted">Block type</label>
-                <select value={form.block_type} onChange={(e) => setForm({ ...form, block_type: e.target.value })} className={selectCls}>
+                <select
+                  value={form.block_type}
+                  onChange={(e) => setForm({ ...form, block_type: e.target.value })}
+                  className={selectCls}
+                >
                   {BLOCK_TYPES.map((b) => <option key={b} value={b}>{b}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-xs font-medium text-inkmuted">Start time</label>
-                <input type="time" value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} className={selectCls} />
+                <input
+                  type="time"
+                  value={form.start_time}
+                  onChange={(e) => setForm({ ...form, start_time: e.target.value })}
+                  className={selectCls}
+                />
               </div>
               <div>
                 <label className="block text-xs font-medium text-inkmuted">End time</label>
-                <input type="time" value={form.end_time} onChange={(e) => setForm({ ...form, end_time: e.target.value })} className={selectCls} />
+                <input
+                  type="time"
+                  value={form.end_time}
+                  onChange={(e) => setForm({ ...form, end_time: e.target.value })}
+                  className={selectCls}
+                />
               </div>
             </div>
 
             {(form.block_type === "lecture" || form.block_type === "lab") && (
               <>
                 <label className="mt-3 block text-xs font-medium text-inkmuted">Subject</label>
-                <select value={form.subject_id} onChange={(e) => setForm({ ...form, subject_id: e.target.value, teacher_id: "" })} className={selectCls}>
+                <select
+                  value={form.subject_id}
+                  onChange={(e) => setForm({ ...form, subject_id: e.target.value, teacher_id: "" })}
+                  className={selectCls}
+                >
                   <option value="">Select subject…</option>
-                  {sectionSubjects.map((s) => <option key={s.id} value={s.id}>{s.name}{s.code ? ` (${s.code})` : ""}</option>)}
+                  {sectionSubjects.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}{s.code ? ` (${s.code})` : ""}
+                    </option>
+                  ))}
                 </select>
 
                 <label className="mt-3 block text-xs font-medium text-inkmuted">Teacher</label>
-                <select value={form.teacher_id} onChange={(e) => setForm({ ...form, teacher_id: e.target.value })} className={selectCls} disabled={!form.subject_id}>
+                <select
+                  value={form.teacher_id}
+                  onChange={(e) => setForm({ ...form, teacher_id: e.target.value })}
+                  className={selectCls}
+                  disabled={!form.subject_id}
+                >
                   <option value="">{form.subject_id ? "Select teacher…" : "Select a subject first"}</option>
-                  {eligibleTeachers.map((t) => <option key={t.id} value={t.id}>{t.full_name || t.email}</option>)}
+                  {eligibleTeachers.map((t) => (
+                    <option key={t.id} value={t.id}>{t.full_name || t.email}</option>
+                  ))}
                 </select>
                 {form.subject_id && eligibleTeachers.length === 0 && (
-                  <p className="mt-1 text-xs text-inkmuted">No teacher is assigned to this subject in this section yet — add one on Teacher Assignments first.</p>
+                  <p className="mt-1 text-xs text-inkmuted">
+                    No teacher is assigned to this subject in this section yet — add one on Teacher Assignments first.
+                  </p>
                 )}
               </>
             )}
@@ -483,12 +679,18 @@ export function AdminTimetablePage() {
             {form.block_type === "lab" && (
               <>
                 <label className="mt-3 block text-xs font-medium text-inkmuted">Lab batch</label>
-                <select value={form.lab_batch_id} onChange={(e) => setForm({ ...form, lab_batch_id: e.target.value })} className={selectCls}>
+                <select
+                  value={form.lab_batch_id}
+                  onChange={(e) => setForm({ ...form, lab_batch_id: e.target.value })}
+                  className={selectCls}
+                >
                   <option value="">Select batch…</option>
                   {sectionBatches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
                 {sectionBatches.length === 0 && (
-                  <p className="mt-1 text-xs text-inkmuted">No lab batches exist for this section yet — create one on Lab Batches first.</p>
+                  <p className="mt-1 text-xs text-inkmuted">
+                    No lab batches exist for this section yet — create one on Lab Batches first.
+                  </p>
                 )}
               </>
             )}
@@ -496,23 +698,48 @@ export function AdminTimetablePage() {
             {(form.block_type === "activity" || form.block_type === "other" || form.block_type === "break") && (
               <>
                 <label className="mt-3 block text-xs font-medium text-inkmuted">Label</label>
-                <input value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="e.g. Technical Activity / NPTEL" className={selectCls} />
+                <input
+                  value={form.label}
+                  onChange={(e) => setForm({ ...form, label: e.target.value })}
+                  placeholder="e.g. Technical Activity / NPTEL"
+                  className={selectCls}
+                />
               </>
             )}
 
             <label className="mt-3 block text-xs font-medium text-inkmuted">Room</label>
-            <input value={form.room} onChange={(e) => setForm({ ...form, room: e.target.value })} placeholder="e.g. EC-201" className={selectCls} />
+            <input
+              value={form.room}
+              onChange={(e) => setForm({ ...form, room: e.target.value })}
+              placeholder="e.g. TB-EC-203"
+              className={selectCls}
+            />
 
             <label className="mt-3 block text-xs font-medium text-inkmuted">Notes (optional)</label>
-            <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className={selectCls} rows={2} />
+            <textarea
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              className={selectCls}
+              rows={2}
+            />
 
-            {formError && <p className="mt-3 rounded-md bg-danger/5 px-3 py-2 text-sm text-danger" role="alert">{formError}</p>}
+            {formError && (
+              <p className="mt-3 rounded-md bg-danger/5 px-3 py-2 text-sm text-danger" role="alert">
+                {formError}
+              </p>
+            )}
 
             <div className="mt-5 flex justify-between gap-2">
               <div>
                 {form.id && (
                   <button
-                    onClick={() => { const e = sectionEntries.find((x) => x.id === form.id); if (e) { setForm(null); handleEnd(e); } }}
+                    onClick={() => {
+                      const e = sectionEntries.find((x) => x.id === form.id);
+                      if (e) {
+                        setForm(null);
+                        handleEnd(e);
+                      }
+                    }}
                     className="rounded-md border border-line px-3 py-1.5 text-sm font-medium text-danger hover:border-danger"
                   >
                     End entry
@@ -520,8 +747,17 @@ export function AdminTimetablePage() {
                 )}
               </div>
               <div className="flex gap-2">
-                <button onClick={() => setForm(null)} className="rounded-md border border-line px-3 py-1.5 text-sm font-medium text-ink">Cancel</button>
-                <button onClick={handleSave} disabled={saving} className="rounded-md bg-copper px-3 py-1.5 text-sm font-medium text-white hover:bg-copper-dark disabled:opacity-50">
+                <button
+                  onClick={() => setForm(null)}
+                  className="rounded-md border border-line px-3 py-1.5 text-sm font-medium text-ink"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="rounded-md bg-copper px-3 py-1.5 text-sm font-medium text-white hover:bg-copper-dark disabled:opacity-50"
+                >
                   {saving ? "Saving…" : "Save"}
                 </button>
               </div>
@@ -535,42 +771,77 @@ export function AdminTimetablePage() {
 
 function MobileDayView({
   days,
-  rows,
-  entriesFor,
+  entriesForSlot,
   describeEntry,
   onAdd,
+  onEdit,
 }: {
   days: number[];
-  rows: { start: string; end: string }[];
-  entriesFor: (day: number, start: string, end: string) => Entry[];
+  entriesForSlot: (day: number, start: string, end: string) => Entry[];
   describeEntry: (e: Entry) => React.ReactNode;
   onAdd: (day: number, start?: string, end?: string) => void;
+  onEdit: (e: Entry) => void;
 }) {
   const [activeDay, setActiveDay] = useState(days[0]);
+
   return (
     <div className="sm:hidden">
-      <div className="mb-3 flex gap-1 overflow-x-auto">
+      <div className="mb-3 flex gap-1 overflow-x-auto pb-1">
         {days.map((d) => (
           <button
             key={d}
             onClick={() => setActiveDay(d)}
-            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium ${activeDay === d ? "bg-copper text-white" : "border border-line text-ink"}`}
+            className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
+              activeDay === d ? "bg-copper text-white shadow-xs" : "border border-line text-ink bg-panel"
+            }`}
           >
-            {DAY_SHORT[d]}
+            {DAY_NAMES[d]}
           </button>
         ))}
       </div>
+
       <div className="space-y-2">
-        {rows.map((row) => {
-          const cellEntries = entriesFor(activeDay, row.start, row.end);
+        {OFFICIAL_TIMETABLE_COLUMNS.map((col, idx) => {
+          if (col.type === "break") {
+            return (
+              <div
+                key={idx}
+                className="flex items-center justify-between rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-800 dark:text-amber-300"
+              >
+                <span>{col.label}</span>
+                <span className="font-mono text-[11px] font-normal text-amber-700/80 dark:text-amber-400">
+                  {formatTimeRange12(col.start, col.end)}
+                </span>
+              </div>
+            );
+          }
+
+          const cellEntries = entriesForSlot(activeDay, col.start, col.end);
           return (
-            <div key={`${row.start}-${row.end}`} className="rounded-lg border border-line bg-panel p-3">
-              <p className="font-mono text-xs text-inkmuted">{row.start}–{row.end}</p>
+            <div key={idx} className="rounded-lg border border-line bg-panel p-3">
+              <div className="flex items-center justify-between border-b border-line/40 pb-1.5">
+                <span className="text-xs font-medium text-inkmuted uppercase tracking-wider">{col.label}</span>
+                <span className="font-mono text-xs text-ink font-semibold">{formatTimeRange12(col.start, col.end)}</span>
+              </div>
+
               {cellEntries.length === 0 ? (
-                <button onClick={() => onAdd(activeDay, row.start, row.end)} className="mt-1 text-sm text-copper-dark">+ Add</button>
+                <button
+                  onClick={() => onAdd(activeDay, col.start, col.end)}
+                  className="mt-2 text-xs font-medium text-copper-dark hover:underline block"
+                >
+                  + Add class
+                </button>
               ) : (
-                <div className="mt-1 space-y-1 text-sm text-ink">
-                  {cellEntries.map((e) => <div key={e.id}>{describeEntry(e)}</div>)}
+                <div className="mt-2 space-y-1.5">
+                  {cellEntries.map((e) => (
+                    <div
+                      key={e.id}
+                      onClick={() => onEdit(e)}
+                      className="cursor-pointer rounded border border-line/60 bg-paper/60 p-2 hover:border-copper"
+                    >
+                      {describeEntry(e)}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

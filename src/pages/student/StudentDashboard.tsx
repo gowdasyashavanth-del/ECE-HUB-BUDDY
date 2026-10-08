@@ -7,7 +7,7 @@ import { StatCard } from "../../components/ui/StatCard";
 import { LoadingState } from "../../components/ui/LoadingState";
 import { ErrorState } from "../../components/ui/ErrorState";
 import { EmptyState } from "../../components/ui/EmptyState";
-import { DAY_SHORT } from "../../lib/timetableSlots";
+import { DAY_SHORT, formatTimeRange12 } from "../../lib/timetableSlots";
 import { UpcomingWidget } from "../../components/planner/UpcomingWidget";
 import { StudyCard } from "../../components/study/StudyCard";
 import { SmartStudyEntryCard } from "../../components/smartstudy/SmartStudyEntryCard";
@@ -394,7 +394,7 @@ export function StudentDashboard() {
                   const subject = subjects?.find((s) => s.id === e.subject_id);
                   return (
                     <div key={e.id} className="flex items-center justify-between rounded-md border border-line bg-panel px-3 py-2 text-sm">
-                      <span className="font-mono text-xs text-inkmuted">{e.start_time}–{e.end_time}</span>
+                      <span className="font-mono text-xs text-inkmuted">{formatTimeRange12(e.start_time, e.end_time)}</span>
                       <span className="text-ink">{e.block_type === "break" ? (e.label || "Break") : (subject?.name ?? e.label ?? "—")}</span>
                       <span className="text-xs text-inkmuted">{e.room ?? ""}</span>
                     </div>
