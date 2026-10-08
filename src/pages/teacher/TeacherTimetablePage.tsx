@@ -107,15 +107,15 @@ export function TeacherTimetablePage() {
     const teacher = teachers.find((t) => t.id === e.teacher_id);
     const batch = batches.find((b) => b.id === e.lab_batch_id);
 
-    if (e.block_type === "break") return <span className="font-semibold text-amber-800 dark:text-amber-300">{e.label || "Break"}</span>;
-    if (e.block_type === "activity" || e.block_type === "other") return <span className="font-semibold text-xs text-ink">{e.label || e.block_type}</span>;
+    if (e.block_type === "break") return <span className="font-semibold text-amber-800 dark:text-amber-300 text-xs">{e.label || "Break"}</span>;
+    if (e.block_type === "activity" || e.block_type === "other") return <span className="font-bold text-xs text-ink leading-tight">{e.label || e.block_type}</span>;
 
     const isMine = e.teacher_id === profile?.id;
     const subjectDisplay = subject ? (subject.code || subject.name) : (e.label || "—");
 
     return (
-      <div className="flex flex-col items-center justify-center text-center leading-tight py-1 w-full">
-        <p className={`font-bold text-xs tracking-tight ${isMine ? "text-copper-dark" : "text-ink"}`}>
+      <div className="flex flex-col items-center justify-center text-center leading-tight w-full">
+        <p className={`font-bold text-xs tracking-tight break-words ${isMine ? "text-copper-dark" : "text-ink"}`}>
           {subjectDisplay}{batch ? <span className="text-[10px] text-copper-dark font-normal"> · {batch.name}</span> : ""}
         </p>
         {teacher && (
@@ -124,7 +124,7 @@ export function TeacherTimetablePage() {
           </p>
         )}
         {e.room && (
-          <p className="mt-0.5 text-[10px] font-mono font-medium text-inkmuted/90 uppercase tracking-wide">
+          <p className="mt-1 text-[10px] font-mono font-semibold text-copper-dark uppercase tracking-wider">
             {e.room}
           </p>
         )}
@@ -148,8 +148,10 @@ export function TeacherTimetablePage() {
               <button
                 key={s.id}
                 onClick={() => setActiveSection(s.id)}
-                className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
-                  activeSection === s.id ? "bg-copper text-white shadow-xs" : "border border-line text-ink bg-panel hover:border-copper"
+                className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+                  activeSection === s.id
+                    ? "bg-copper text-white shadow-xs"
+                    : "border border-line text-ink bg-panel hover:border-copper"
                 }`}
               >
                 Section {s.name}
@@ -161,9 +163,9 @@ export function TeacherTimetablePage() {
             <EmptyState title="No timetable has been created for this section yet" message="Check back once your Super Admin sets up the schedule." />
           ) : (
             <>
-              {/* Official Academic Timetable Grid (Desktop & Tablet Horizontal Scroll) */}
+              {/* Desktop / Tablet Official Academic Timetable Grid */}
               <div className="hidden sm:block overflow-x-auto rounded-xl border border-line bg-panel shadow-xs">
-                <table className="w-full min-w-[980px] border-collapse text-xs">
+                <table className="w-full min-w-[1020px] border-collapse text-xs">
                   <thead>
                     <tr className="bg-paper/70">
                       <th className="w-28 min-w-[100px] border-b border-r border-line p-2.5 text-center font-bold uppercase tracking-wider text-ink">
@@ -174,12 +176,12 @@ export function TeacherTimetablePage() {
                           return (
                             <th
                               key={col.label}
-                              className="w-14 min-w-[56px] max-w-[64px] border-b border-r border-line bg-amber-500/10 p-2 text-center"
+                              className="w-16 min-w-[56px] max-w-[64px] border-b border-r border-line bg-amber-500/10 p-2 text-center select-none"
                             >
-                              <div className="font-bold text-[11px] text-amber-800 dark:text-amber-300 uppercase tracking-wider">
+                              <div className="font-bold text-[11px] text-amber-900 dark:text-amber-200 uppercase tracking-widest">
                                 {col.label}
                               </div>
-                              <div className="text-[9px] font-medium text-amber-700/80 dark:text-amber-400/80 whitespace-nowrap mt-0.5">
+                              <div className="text-[9px] font-medium text-amber-800/80 dark:text-amber-300/80 whitespace-nowrap mt-0.5">
                                 {formatTimeRange12(col.start, col.end)}
                               </div>
                             </th>
@@ -188,7 +190,7 @@ export function TeacherTimetablePage() {
                         return (
                           <th
                             key={idx}
-                            className="min-w-[120px] border-b border-r border-line p-2 text-center"
+                            className="min-w-[125px] border-b border-r border-line p-2 text-center"
                           >
                             <div className="font-semibold text-ink whitespace-nowrap">
                               {formatTimeRange12(col.start, col.end)}
@@ -204,8 +206,8 @@ export function TeacherTimetablePage() {
                   <tbody>
                     {DAYS.map((d, dayIdx) => (
                       <tr key={d} className="hover:bg-paper/20 transition-colors">
-                        {/* Day label column */}
-                        <td className="border-b border-r border-line bg-paper/40 px-3 py-2 text-center font-bold text-ink whitespace-nowrap">
+                        {/* Day Column */}
+                        <td className="border-b border-r border-line bg-paper/40 px-3 py-3 text-center font-bold text-xs text-ink uppercase tracking-wider whitespace-nowrap align-middle">
                           {DAY_NAMES[d]}
                         </td>
 
@@ -217,10 +219,10 @@ export function TeacherTimetablePage() {
                                 <td
                                   key={col.label}
                                   rowSpan={DAYS.length}
-                                  className="w-14 min-w-[56px] max-w-[64px] border-b border-r border-line bg-amber-500/10 text-center align-middle select-none"
+                                  className="w-16 min-w-[56px] max-w-[64px] border-b border-r border-line bg-amber-500/5 dark:bg-amber-950/20 text-center align-middle select-none p-0"
                                 >
-                                  <div className="flex h-full min-h-[380px] flex-col items-center justify-center py-4">
-                                    <span className="font-bold text-[11px] uppercase tracking-widest text-amber-800 dark:text-amber-300 [writing-mode:vertical-rl] rotate-180">
+                                  <div className="flex h-full flex-col items-center justify-center py-6">
+                                    <span className="font-bold text-xs uppercase tracking-widest text-amber-900 dark:text-amber-200 [writing-mode:vertical-rl] rotate-180">
                                       {col.label}
                                     </span>
                                   </div>
@@ -230,26 +232,26 @@ export function TeacherTimetablePage() {
                             return null;
                           }
 
-                          // Period Slot
+                          // Regular Period Slot with robust content-driven sizing
                           const cellEntries = entriesForSlot(d, col.start, col.end);
                           return (
                             <td
                               key={colIdx}
-                              className="min-w-[120px] max-w-[160px] border-b border-r border-line p-1.5 align-middle"
+                              className="min-w-[125px] max-w-[160px] border-b border-r border-line px-2 py-2.5 align-middle"
                             >
                               {cellEntries.length === 0 ? (
-                                <div className="min-h-[64px]" />
+                                <div className="min-h-[76px] w-full" />
                               ) : (
-                                <div className="space-y-1">
+                                <div className="space-y-1.5">
                                   {cellEntries.map((e) => {
                                     const isMine = e.teacher_id === profile?.id;
                                     return (
                                       <div
                                         key={e.id}
-                                        className={`w-full rounded border p-2 shadow-xs transition-all ${
+                                        className={`w-full min-h-[76px] rounded-md border p-2 text-center flex flex-col justify-center items-center shadow-2xs transition-all ${
                                           isMine
                                             ? "border-copper/80 bg-copper-light/30 ring-1 ring-copper/40"
-                                            : "border-line/70 bg-paper/60"
+                                            : "border-line bg-panel"
                                         }`}
                                       >
                                         {describe(e)}
@@ -267,11 +269,13 @@ export function TeacherTimetablePage() {
                 </table>
               </div>
 
-              {/* Mobile view with 12-hour format */}
-              <MobileList
+              {/* Mobile Purpose-Built Day Timetable */}
+              <MobileDayView
                 days={DAYS}
                 entriesForSlot={entriesForSlot}
-                describe={describe}
+                subjects={subjects}
+                teachers={teachers}
+                batches={batches}
                 profileId={profile?.id}
               />
             </>
@@ -282,28 +286,38 @@ export function TeacherTimetablePage() {
   );
 }
 
-function MobileList({
+/**
+ * Compact, purpose-built mobile timetable view (single-level cards, compact break strips, lightweight free periods)
+ */
+function MobileDayView({
   days,
   entriesForSlot,
-  describe,
+  subjects,
+  teachers,
+  batches,
   profileId,
 }: {
   days: number[];
   entriesForSlot: (day: number, start: string, end: string) => Entry[];
-  describe: (e: Entry) => React.ReactNode;
+  subjects: { id: string; name: string; code: string | null }[];
+  teachers: { id: string; full_name: string; email: string }[];
+  batches: { id: string; name: string }[];
   profileId?: string;
 }) {
   const [day, setDay] = useState(days[0]);
 
   return (
     <div className="sm:hidden">
-      <div className="mb-3 flex gap-1 overflow-x-auto pb-1">
+      {/* Compact horizontal day selector (single scrollable row, never wraps) */}
+      <div className="mb-3.5 flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
         {days.map((d) => (
           <button
             key={d}
             onClick={() => setDay(d)}
-            className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
-              day === d ? "bg-copper text-white shadow-xs" : "border border-line text-ink bg-panel"
+            className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors ${
+              day === d
+                ? "bg-copper text-white shadow-xs"
+                : "border border-line text-ink bg-panel hover:border-copper"
             }`}
           >
             {DAY_NAMES[d]}
@@ -311,16 +325,21 @@ function MobileList({
         ))}
       </div>
 
+      {/* Purpose-built vertical period list */}
       <div className="space-y-2">
         {OFFICIAL_TIMETABLE_COLUMNS.map((col, idx) => {
+          // Compact break strip
           if (col.type === "break") {
             return (
               <div
                 key={idx}
-                className="flex items-center justify-between rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-800 dark:text-amber-300"
+                className="flex items-center justify-between rounded-lg border border-amber-400/30 bg-amber-500/10 px-3.5 py-2 text-xs font-semibold text-amber-900 dark:text-amber-200 shadow-2xs"
               >
-                <span>{col.label}</span>
-                <span className="font-mono text-[11px] font-normal text-amber-700/80 dark:text-amber-400">
+                <div className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                  <span className="uppercase tracking-wider">{col.label}</span>
+                </div>
+                <span className="font-mono text-[11px] font-normal text-amber-800/80 dark:text-amber-300">
                   {formatTimeRange12(col.start, col.end)}
                 </span>
               </div>
@@ -328,33 +347,68 @@ function MobileList({
           }
 
           const cell = entriesForSlot(day, col.start, col.end);
-          return (
-            <div key={idx} className="rounded-lg border border-line bg-panel p-3">
-              <div className="flex items-center justify-between border-b border-line/40 pb-1.5">
-                <span className="text-xs font-medium text-inkmuted uppercase tracking-wider">{col.label}</span>
-                <span className="font-mono text-xs text-ink font-semibold">{formatTimeRange12(col.start, col.end)}</span>
-              </div>
-              {cell.length === 0 ? (
-                <p className="mt-2 text-xs text-inkmuted italic">No class</p>
-              ) : (
-                <div className="mt-2 space-y-1.5">
-                  {cell.map((e) => {
-                    const isMine = e.teacher_id === profileId;
-                    return (
-                      <div
-                        key={e.id}
-                        className={`rounded border p-2 ${
-                          isMine
-                            ? "border-copper/80 bg-copper-light/30 ring-1 ring-copper/40"
-                            : "border-line/60 bg-paper/60"
-                        }`}
-                      >
-                        {describe(e)}
-                      </div>
-                    );
-                  })}
+
+          // Lightweight Free Period Card
+          if (cell.length === 0) {
+            return (
+              <div
+                key={idx}
+                className="rounded-lg border border-dashed border-line/50 bg-paper/20 px-3.5 py-2 text-xs"
+              >
+                <div className="flex items-center justify-between text-inkmuted font-medium">
+                  <span className="font-bold text-xs text-ink/80">P{col.periodNumber}</span>
+                  <span className="font-mono text-[11px]">{formatTimeRange12(col.start, col.end)}</span>
                 </div>
-              )}
+                <div className="mt-1">
+                  <span className="text-xs text-inkmuted/70 italic">Free period</span>
+                </div>
+              </div>
+            );
+          }
+
+          // Single-level compact period card (no nested redundant containers)
+          return (
+            <div key={idx} className="space-y-1.5">
+              {cell.map((e) => {
+                const subject = subjects.find((s) => s.id === e.subject_id);
+                const teacher = teachers.find((t) => t.id === e.teacher_id);
+                const batch = batches.find((b) => b.id === e.lab_batch_id);
+                const isMine = e.teacher_id === profileId;
+                const subjectDisplay = subject ? (subject.code || subject.name) : (e.label || "—");
+
+                return (
+                  <div
+                    key={e.id}
+                    className={`rounded-lg border p-3 shadow-2xs transition-all ${
+                      isMine
+                        ? "border-copper/80 bg-copper-light/30 ring-1 ring-copper/40"
+                        : "border-line bg-panel"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between text-xs font-medium text-inkmuted">
+                      <span className="font-bold text-xs text-ink">P{col.periodNumber}</span>
+                      <span className="font-mono text-[11px]">{formatTimeRange12(col.start, col.end)}</span>
+                    </div>
+                    <div className="border-t border-line/50 my-2" />
+                    <div className="text-center">
+                      <div className={`font-bold text-sm tracking-tight ${isMine ? "text-copper-dark" : "text-ink"}`}>
+                        {subjectDisplay}
+                        {batch ? <span className="text-xs text-copper-dark font-normal"> · {batch.name}</span> : ""}
+                      </div>
+                      {teacher && (
+                        <div className="text-xs font-medium text-inkmuted mt-0.5">
+                          {teacher.full_name || teacher.email}
+                        </div>
+                      )}
+                      {e.room && (
+                        <div className="text-xs font-mono font-semibold text-copper-dark mt-1 tracking-wide">
+                          {e.room}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           );
         })}
