@@ -176,12 +176,12 @@ export function TeacherTimetablePage() {
                           return (
                             <th
                               key={col.label}
-                              className="w-16 min-w-[56px] max-w-[64px] border-b border-r border-line bg-amber-500/10 p-2 text-center select-none"
+                              className="w-16 min-w-[56px] max-w-[64px] border-b border-r border-amber-300/40 dark:border-amber-700/40 bg-amber-100/70 dark:bg-amber-950/40 p-2 text-center select-none"
                             >
-                              <div className="font-bold text-[11px] text-amber-900 dark:text-amber-200 uppercase tracking-widest">
+                              <div className="font-extrabold text-[11px] text-amber-950 dark:text-amber-200 uppercase tracking-widest">
                                 {col.label}
                               </div>
-                              <div className="text-[9px] font-medium text-amber-800/80 dark:text-amber-300/80 whitespace-nowrap mt-0.5">
+                              <div className="text-[9px] font-bold text-amber-900/90 dark:text-amber-300 whitespace-nowrap mt-0.5">
                                 {formatTimeRange12(col.start, col.end)}
                               </div>
                             </th>
@@ -219,10 +219,10 @@ export function TeacherTimetablePage() {
                                 <td
                                   key={col.label}
                                   rowSpan={DAYS.length}
-                                  className="w-16 min-w-[56px] max-w-[64px] border-b border-r border-line bg-amber-500/5 dark:bg-amber-950/20 text-center align-middle select-none p-0"
+                                  className="w-16 min-w-[56px] max-w-[64px] border-b border-r border-amber-300/30 dark:border-amber-800/40 bg-amber-100/40 dark:bg-amber-950/25 text-center align-middle select-none p-0"
                                 >
                                   <div className="flex h-full flex-col items-center justify-center py-6">
-                                    <span className="font-bold text-xs uppercase tracking-widest text-amber-900 dark:text-amber-200 [writing-mode:vertical-rl] rotate-180">
+                                    <span className="font-extrabold text-xs uppercase tracking-widest text-amber-950 dark:text-amber-200 [writing-mode:vertical-rl] rotate-180">
                                       {col.label}
                                     </span>
                                   </div>
@@ -308,38 +308,43 @@ function MobileDayView({
 
   return (
     <div className="sm:hidden">
-      {/* Compact horizontal day selector (single scrollable row, never wraps) */}
-      <div className="mb-3.5 flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-        {days.map((d) => (
-          <button
-            key={d}
-            onClick={() => setDay(d)}
-            className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors ${
-              day === d
-                ? "bg-copper text-white shadow-xs"
-                : "border border-line text-ink bg-panel hover:border-copper"
-            }`}
-          >
-            {DAY_NAMES[d]}
-          </button>
-        ))}
+      {/* Horizontal day selector (scrollable, accessible all 6 days, no clipping) */}
+      <div className="mb-3 flex items-center gap-1.5 overflow-x-auto pb-1.5 pt-0.5 no-scrollbar [-webkit-overflow-scrolling:touch]">
+        {days.map((d) => {
+          const isActive = day === d;
+          return (
+            <button
+              key={d}
+              onClick={() => setDay(d)}
+              className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap transition-all ${
+                isActive
+                  ? "bg-copper text-white shadow-xs"
+                  : "border border-line bg-panel text-ink hover:border-copper/70"
+              }`}
+            >
+              {DAY_NAMES[d]}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Purpose-built vertical period list */}
-      <div className="space-y-2">
+      {/* Vertical period list */}
+      <div className="space-y-1.5">
         {OFFICIAL_TIMETABLE_COLUMNS.map((col, idx) => {
-          // Compact break strip
+          // Compact high-contrast break strip
           if (col.type === "break") {
             return (
               <div
                 key={idx}
-                className="flex items-center justify-between rounded-lg border border-amber-400/30 bg-amber-500/10 px-3.5 py-2 text-xs font-semibold text-amber-900 dark:text-amber-200 shadow-2xs"
+                className="flex items-center justify-between rounded-md border border-amber-300/60 dark:border-amber-700/60 bg-amber-100/70 dark:bg-amber-950/40 px-3 py-1.5 text-xs font-bold text-amber-950 dark:text-amber-200 shadow-2xs"
               >
                 <div className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                  <span className="uppercase tracking-wider">{col.label}</span>
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-600 dark:bg-amber-400" />
+                  <span className="uppercase tracking-wider text-[11px] font-extrabold text-amber-950 dark:text-amber-200">
+                    {col.label}
+                  </span>
                 </div>
-                <span className="font-mono text-[11px] font-normal text-amber-800/80 dark:text-amber-300">
+                <span className="font-mono text-[11px] font-semibold text-amber-900 dark:text-amber-300">
                   {formatTimeRange12(col.start, col.end)}
                 </span>
               </div>
@@ -348,27 +353,29 @@ function MobileDayView({
 
           const cell = entriesForSlot(day, col.start, col.end);
 
-          // Lightweight Free Period Card
+          // Lightweight compact Free Period Card
           if (cell.length === 0) {
             return (
               <div
                 key={idx}
-                className="rounded-lg border border-dashed border-line/50 bg-paper/20 px-3.5 py-2 text-xs"
+                className="rounded-md border border-dashed border-line/60 bg-paper/30 px-3 py-1.5 text-xs"
               >
-                <div className="flex items-center justify-between text-inkmuted font-medium">
-                  <span className="font-bold text-xs text-ink/80">P{col.periodNumber}</span>
-                  <span className="font-mono text-[11px]">{formatTimeRange12(col.start, col.end)}</span>
-                </div>
-                <div className="mt-1">
-                  <span className="text-xs text-inkmuted/70 italic">Free period</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-xs text-ink/80">P{col.periodNumber}</span>
+                    <span className="text-[11px] text-inkmuted/70 italic">Free</span>
+                  </div>
+                  <span className="font-mono text-[10px] text-inkmuted">
+                    {formatTimeRange12(col.start, col.end)}
+                  </span>
                 </div>
               </div>
             );
           }
 
-          // Single-level compact period card (no nested redundant containers)
+          // Single-level compact period card with optimized density
           return (
-            <div key={idx} className="space-y-1.5">
+            <div key={idx} className="space-y-1">
               {cell.map((e) => {
                 const subject = subjects.find((s) => s.id === e.subject_id);
                 const teacher = teachers.find((t) => t.id === e.teacher_id);
@@ -379,29 +386,33 @@ function MobileDayView({
                 return (
                   <div
                     key={e.id}
-                    className={`rounded-lg border p-3 shadow-2xs transition-all ${
+                    className={`rounded-md border px-3 py-2 shadow-2xs transition-all ${
                       isMine
                         ? "border-copper/80 bg-copper-light/30 ring-1 ring-copper/40"
                         : "border-line bg-panel"
                     }`}
                   >
-                    <div className="flex items-center justify-between text-xs font-medium text-inkmuted">
-                      <span className="font-bold text-xs text-ink">P{col.periodNumber}</span>
-                      <span className="font-mono text-[11px]">{formatTimeRange12(col.start, col.end)}</span>
-                    </div>
-                    <div className="border-t border-line/50 my-2" />
-                    <div className="text-center">
-                      <div className={`font-bold text-sm tracking-tight ${isMine ? "text-copper-dark" : "text-ink"}`}>
-                        {subjectDisplay}
-                        {batch ? <span className="text-xs text-copper-dark font-normal"> · {batch.name}</span> : ""}
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-extrabold text-xs text-ink">P{col.periodNumber}</span>
+                        <span className={`font-bold text-xs tracking-tight ${isMine ? "text-copper-dark" : "text-ink"}`}>
+                          {subjectDisplay}
+                          {batch ? (
+                            <span className="text-[11px] text-copper-dark font-normal"> · {batch.name}</span>
+                          ) : null}
+                        </span>
                       </div>
-                      {teacher && (
-                        <div className="text-xs font-medium text-inkmuted mt-0.5">
-                          {teacher.full_name || teacher.email}
-                        </div>
-                      )}
+                      <span className="font-mono text-[10px] text-inkmuted font-medium shrink-0">
+                        {formatTimeRange12(col.start, col.end)}
+                      </span>
+                    </div>
+
+                    <div className="mt-1 flex items-center justify-between text-[11px] text-inkmuted">
+                      <div className="truncate pr-2">
+                        {teacher ? (teacher.full_name || teacher.email) : "—"}
+                      </div>
                       {e.room && (
-                        <div className="text-xs font-mono font-semibold text-copper-dark mt-1 tracking-wide">
+                        <div className="font-mono font-semibold text-copper-dark shrink-0">
                           {e.room}
                         </div>
                       )}
