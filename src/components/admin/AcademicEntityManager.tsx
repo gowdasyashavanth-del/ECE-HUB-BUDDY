@@ -33,7 +33,13 @@ export function AcademicEntityManager({ config }: { config: EntityConfig }) {
 
     const [rowsRes, ...parentRes] = await Promise.all([
       supabase.from(config.table).select(config.listSelect).order(config.orderBy),
-      ...config.parents.map((p) => supabase!.from(p.table).select(p.optionsSelect)),
+      ...config.parents.map((p) => {
+        let q = supabase!.from(p.table).select(p.optionsSelect);
+        if (p.optionsOrderBy) {
+          q = q.order(p.optionsOrderBy, { ascending: p.optionsOrderAscending ?? true });
+        }
+        return q;
+      }),
     ]);
 
     if (rowsRes.error) {
