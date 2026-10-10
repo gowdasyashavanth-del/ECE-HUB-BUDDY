@@ -21,7 +21,7 @@ interface Reg { id: string; name: string; academic_year_id: string; }
 interface Prog { id: string; name: string; regulation_id: string; }
 interface Sem { id: string; number: number; name: string | null; program_id: string; }
 interface Sect { id: string; name: string; semester_id: string; academic_year_id: string; }
-interface Subj { id: string; name: string; semester_id: string; }
+interface Subj { id: string; name: string; semester_id: string; order_number?: number; }
 
 interface UserRow {
   id: string;
@@ -97,12 +97,12 @@ export function UserManagementPage() {
     setLoadError(null);
     setLoading(true);
     const [y, r, p, s, sec, subj, usr, sa, ta] = await Promise.all([
-      supabase.from("academic_years").select("id, name").order("name"),
-      supabase.from("regulations").select("id, name, academic_year_id"),
-      supabase.from("programs").select("id, name, regulation_id"),
-      supabase.from("semesters").select("id, number, name, program_id"),
-      supabase.from("sections").select("id, name, semester_id, academic_year_id"),
-      supabase.from("subjects").select("id, name, semester_id"),
+      supabase.from("academic_years").select("id, name").order("name", { ascending: false }),
+      supabase.from("regulations").select("id, name, academic_year_id").order("name"),
+      supabase.from("programs").select("id, name, regulation_id").order("name"),
+      supabase.from("semesters").select("id, number, name, program_id").order("number"),
+      supabase.from("sections").select("id, name, semester_id, academic_year_id").order("name"),
+      supabase.from("subjects").select("id, name, semester_id, order_number").order("order_number").order("name"),
       supabase.from("users").select("id, email, full_name, role, usn, employee_id, created_at").in("role", ["student", "teacher"]).order("created_at", { ascending: false }),
       supabase.from("student_assignments").select("student_id, is_current, section_id, semester_id").eq("is_current", true),
       supabase.from("teacher_assignments").select("teacher_id, section_id, subject_id"),
@@ -150,20 +150,29 @@ export function UserManagementPage() {
 
   const filteredRegs = useMemo(() => regs.filter((r) => r.academic_year_id === form.yearId), [regs, form.yearId]);
   const filteredPrograms = useMemo(() => programs.filter((p) => p.regulation_id === form.regId), [programs, form.regId]);
-  const filteredSemesters = useMemo(() => semesters.filter((s) => s.program_id === form.progId), [semesters, form.progId]);
+  const filteredSemesters = useMemo(
+    () => semesters.filter((s) => s.program_id === form.progId).sort((a, b) => a.number - b.number),
+    [semesters, form.progId]
+  );
   const filteredSections = useMemo(
-    () => sections.filter((s) => s.semester_id === form.semId && s.academic_year_id === form.yearId),
+    () => sections.filter((s) => s.semester_id === form.semId && s.academic_year_id === form.yearId).sort((a, b) => a.name.localeCompare(b.name)),
     [sections, form.semId, form.yearId]
   );
-  const filteredSubjects = useMemo(() => subjects.filter((s) => s.semester_id === form.semId), [subjects, form.semId]);
+  const filteredSubjects = useMemo(
+    () => subjects.filter((s) => s.semester_id === form.semId).sort((a, b) => (a.order_number ?? 0) - (b.order_number ?? 0) || a.name.localeCompare(b.name)),
+    [subjects, form.semId]
+  );
 
   // Same cascading-filter shape as the Add form above, scoped to
   // editForm instead of the tab's add-form state.
   const editFilteredRegs = useMemo(() => regs.filter((r) => r.academic_year_id === editForm.yearId), [regs, editForm.yearId]);
   const editFilteredPrograms = useMemo(() => programs.filter((p) => p.regulation_id === editForm.regId), [programs, editForm.regId]);
-  const editFilteredSemesters = useMemo(() => semesters.filter((s) => s.program_id === editForm.progId), [semesters, editForm.progId]);
+  const editFilteredSemesters = useMemo(
+    () => semesters.filter((s) => s.program_id === editForm.progId).sort((a, b) => a.number - b.number),
+    [semesters, editForm.progId]
+  );
   const editFilteredSections = useMemo(
-    () => sections.filter((s) => s.semester_id === editForm.semId && s.academic_year_id === editForm.yearId),
+    () => sections.filter((s) => s.semester_id === editForm.semId && s.academic_year_id === editForm.yearId).sort((a, b) => a.name.localeCompare(b.name)),
     [sections, editForm.semId, editForm.yearId]
   );
 

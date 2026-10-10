@@ -25,6 +25,8 @@ export interface ParentConfig {
   label: string; // shown in the form, e.g. "Academic Year"
   table: string; // parent table to query for dropdown options
   optionsSelect: string; // select clause for fetching dropdown options
+  optionsOrderBy?: string; // column to order dropdown options by
+  optionsOrderAscending?: boolean; // whether options ordering is ascending (defaults to true)
   optionLabel: (row: any) => string; // how to render each dropdown option
 }
 
@@ -87,6 +89,8 @@ export const ENTITY_CONFIGS: Record<string, EntityConfig> = {
         label: "Academic Year",
         table: "academic_years",
         optionsSelect: "id, name",
+        optionsOrderBy: "name",
+        optionsOrderAscending: false,
         optionLabel: (r) => r.name,
       },
     ],
@@ -110,6 +114,7 @@ export const ENTITY_CONFIGS: Record<string, EntityConfig> = {
         label: "Regulation",
         table: "regulations",
         optionsSelect: "id, name",
+        optionsOrderBy: "name",
         optionLabel: (r) => r.name,
       },
     ],
@@ -136,6 +141,7 @@ export const ENTITY_CONFIGS: Record<string, EntityConfig> = {
         label: "Program",
         table: "programs",
         optionsSelect: "id, name",
+        optionsOrderBy: "name",
         optionLabel: (r) => r.name,
       },
     ],
@@ -161,6 +167,7 @@ export const ENTITY_CONFIGS: Record<string, EntityConfig> = {
         label: "Semester",
         table: "semesters",
         optionsSelect: "id, number, programs(name)",
+        optionsOrderBy: "number",
         optionLabel: (r) => `Sem ${r.number} — ${first<{ name: string }>(r.programs)?.name ?? ""}`,
       },
       {
@@ -168,6 +175,8 @@ export const ENTITY_CONFIGS: Record<string, EntityConfig> = {
         label: "Academic Year",
         table: "academic_years",
         optionsSelect: "id, name",
+        optionsOrderBy: "name",
+        optionsOrderAscending: false,
         optionLabel: (r) => r.name,
       },
     ],
@@ -195,6 +204,7 @@ export const ENTITY_CONFIGS: Record<string, EntityConfig> = {
         label: "Semester",
         table: "semesters",
         optionsSelect: "id, number, programs(name)",
+        optionsOrderBy: "number",
         optionLabel: (r) => `Sem ${r.number} — ${first<{ name: string }>(r.programs)?.name ?? ""}`,
       },
     ],
@@ -226,6 +236,7 @@ export const ENTITY_CONFIGS: Record<string, EntityConfig> = {
         label: "Subject",
         table: "subjects",
         optionsSelect: "id, name",
+        optionsOrderBy: "order_number",
         optionLabel: (r) => r.name,
       },
     ],
@@ -252,6 +263,7 @@ export const ENTITY_CONFIGS: Record<string, EntityConfig> = {
         label: "Unit",
         table: "units",
         optionsSelect: "id, name, subjects(name)",
+        optionsOrderBy: "order_number",
         optionLabel: (r) => `${r.name} (${first<{ name: string }>(r.subjects)?.name ?? ""})`,
       },
     ],

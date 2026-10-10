@@ -57,12 +57,12 @@ export function AcademicStructurePage() {
     if (!supabase) return;
     setError(null);
     const [yearRes, regRes, progRes, semRes, secRes, subRes] = await Promise.all([
-      supabase.from("academic_years").select("id, name, is_current").order("name"),
+      supabase.from("academic_years").select("id, name, is_current").order("is_current", { ascending: false }).order("name", { ascending: false }),
       supabase.from("regulations").select("id, name, academic_year_id").order("name"),
       supabase.from("programs").select("id, name, regulation_id").order("name"),
       supabase.from("semesters").select("id, number, program_id").order("number"),
-      supabase.from("sections").select("id, name, semester_id").order("name"),
-      supabase.from("subjects").select("id, name, code, semester_id, order_number").order("order_number"),
+      supabase.from("sections").select("id, name, semester_id, academic_year_id").order("name"),
+      supabase.from("subjects").select("id, name, code, semester_id, order_number").order("order_number").order("name"),
     ]);
 
     if (yearRes.error) {
@@ -95,7 +95,7 @@ export function AcademicStructurePage() {
                 .map((s) => ({
                   id: s.id,
                   number: s.number,
-                  sections: secRows.filter((sec) => sec.semester_id === s.id),
+                  sections: secRows.filter((sec) => sec.semester_id === s.id && sec.academic_year_id === y.id),
                   subjects: subRows.filter((sub) => sub.semester_id === s.id),
                 })),
             })),

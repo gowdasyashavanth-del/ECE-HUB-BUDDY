@@ -55,11 +55,11 @@ export function StudentAssignmentsPage() {
     setLoading(true);
     const [st, y, r, p, s, sec, asg] = await Promise.all([
       supabase.from("users").select("id, full_name, email").eq("role", "student").order("full_name"),
-      supabase.from("academic_years").select("id, name").order("name"),
-      supabase.from("regulations").select("id, name, academic_year_id"),
-      supabase.from("programs").select("id, name, regulation_id"),
-      supabase.from("semesters").select("id, number, program_id"),
-      supabase.from("sections").select("id, name, semester_id, academic_year_id"),
+      supabase.from("academic_years").select("id, name").order("name", { ascending: false }),
+      supabase.from("regulations").select("id, name, academic_year_id").order("name"),
+      supabase.from("programs").select("id, name, regulation_id").order("name"),
+      supabase.from("semesters").select("id, number, program_id").order("number"),
+      supabase.from("sections").select("id, name, semester_id, academic_year_id").order("name"),
       supabase.from("student_assignments").select("id, student_id, academic_year_id, regulation_id, program_id, semester_id, section_id, is_current, created_at"),
     ]);
     const firstErr = [st, y, r, p, s, sec, asg].find((res) => res.error);
@@ -83,9 +83,12 @@ export function StudentAssignmentsPage() {
 
   const filteredRegs = useMemo(() => regs.filter((r) => r.academic_year_id === yearId), [regs, yearId]);
   const filteredPrograms = useMemo(() => programs.filter((p) => p.regulation_id === regId), [programs, regId]);
-  const filteredSemesters = useMemo(() => semesters.filter((s) => s.program_id === progId), [semesters, progId]);
+  const filteredSemesters = useMemo(
+    () => semesters.filter((s) => s.program_id === progId).sort((a, b) => a.number - b.number),
+    [semesters, progId]
+  );
   const filteredSections = useMemo(
-    () => sections.filter((s) => s.semester_id === semId && s.academic_year_id === yearId),
+    () => sections.filter((s) => s.semester_id === semId && s.academic_year_id === yearId).sort((a, b) => a.name.localeCompare(b.name)),
     [sections, semId, yearId]
   );
 
