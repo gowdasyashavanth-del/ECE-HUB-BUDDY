@@ -15,6 +15,13 @@ import {
   timeToMinutes,
   formatTimeRange12,
 } from "../../lib/timetableSlots";
+import {
+  checkTimetableClash,
+  getEligibleTeachers,
+  isLabSubject,
+  type TimetableEntryLike,
+  type ValidationCandidate,
+} from "../../lib/timetableValidation";
 
 interface Year { id: string; name: string; }
 interface Reg { id: string; name: string; academic_year_id: string; }
@@ -57,9 +64,24 @@ type FormState = {
   label: string;
   notes: string;
   period_order: number;
+  is_dual_batch: boolean;
+  batch1_id: string;
+  batch1_subject_id: string;
+  batch1_teacher_id: string;
+  batch1_room: string;
+  batch2_id: string;
+  batch2_subject_id: string;
+  batch2_teacher_id: string;
+  batch2_room: string;
 };
 
-const emptyForm = (day: number, start: string, end: string, period: number): FormState => ({
+const emptyForm = (
+  day: number,
+  start: string,
+  end: string,
+  period: number,
+  defaultBatches: Batch[] = []
+): FormState => ({
   id: null,
   day_of_week: day,
   start_time: start,
@@ -72,6 +94,15 @@ const emptyForm = (day: number, start: string, end: string, period: number): For
   label: "",
   notes: "",
   period_order: period,
+  is_dual_batch: defaultBatches.length >= 2,
+  batch1_id: defaultBatches[0]?.id ?? "",
+  batch1_subject_id: "",
+  batch1_teacher_id: "",
+  batch1_room: "",
+  batch2_id: defaultBatches[1]?.id ?? "",
+  batch2_subject_id: "",
+  batch2_teacher_id: "",
+  batch2_room: "",
 });
 
 const selectCls = "mt-1 w-full rounded-md border border-line bg-paper px-2.5 py-1.5 text-sm text-ink";
@@ -150,16 +181,42 @@ export function AdminTimetablePage() {
     [sections, semId, yearId]
   );
   const sectionSubjects = useMemo(() => subjects.filter((s) => s.semester_id === semId), [subjects, semId]);
+  const sectionLabSubjects = useMemo(() => sectionSubjects.filter(isLabSubject), [sectionSubjects]);
+  const displayedSubjects = useMemo(() => {
+    if (form?.block_type === "lab") {
+      return sectionLabSubjects;
+    }
+    return sectionSubjects;
+  }, [form?.block_type, sectionLabSubjects, sectionSubjects]);
   const sectionBatches = useMemo(() => batches.filter((b) => b.section_id === sectionId), [batches, sectionId]);
   const sectionEntries = useMemo(() => allEntries.filter((e) => e.section_id === sectionId), [allEntries, sectionId]);
 
   const eligibleTeachers = useMemo(() => {
-    if (!form?.subject_id) return [];
-    const ids = teacherAssignments
-      .filter((a) => a.section_id === sectionId && a.subject_id === form.subject_id)
-      .map((a) => a.teacher_id);
-    return teachers.filter((t) => ids.includes(t.id));
+    return getEligibleTeachers(
+      form?.subject_id ?? "",
+      sectionId,
+      teacherAssignments,
+      teachers
+    );
   }, [teacherAssignments, teachers, sectionId, form?.subject_id]);
+
+  const eligibleTeachersBatch1 = useMemo(() => {
+    return getEligibleTeachers(
+      form?.batch1_subject_id ?? "",
+      sectionId,
+      teacherAssignments,
+      teachers
+    );
+  }, [teacherAssignments, teachers, sectionId, form?.batch1_subject_id]);
+
+  const eligibleTeachersBatch2 = useMemo(() => {
+    return getEligibleTeachers(
+      form?.batch2_subject_id ?? "",
+      sectionId,
+      teacherAssignments,
+      teachers
+    );
+  }, [teacherAssignments, teachers, sectionId, form?.batch2_subject_id]);
 
   function entriesForSlot(day: number, start: string, end: string) {
     return sectionEntries.filter(
@@ -168,7 +225,36 @@ export function AdminTimetablePage() {
   }
 
   function openAdd(day: number, start = "09:00", end = "09:55") {
-    setForm(emptyForm(day, start, end, PERIOD_SLOTS.length + 1));
+    setForm(emptyForm(day, start, end, PERIOD_SLOTS.length + 1, sectionBatches));
+    setFormError(null);
+  }
+
+  function openAddBatch(day: number, start: string, end: string, existingInSlot: Entry[]) {
+    const scheduledBatchIds = new Set(existingInSlot.map((e) => e.lab_batch_id).filter(Boolean));
+    const nextBatch = sectionBatches.find((b) => !scheduledBatchIds.has(b.id));
+    setForm({
+      id: null,
+      day_of_week: day,
+      start_time: start,
+      end_time: end,
+      block_type: "lab",
+      subject_id: "",
+      teacher_id: "",
+      lab_batch_id: nextBatch?.id ?? "",
+      room: "",
+      label: "",
+      notes: "",
+      period_order: existingInSlot[0]?.period_order ?? PERIOD_SLOTS.length + 1,
+      is_dual_batch: false,
+      batch1_id: sectionBatches[0]?.id ?? "",
+      batch1_subject_id: "",
+      batch1_teacher_id: "",
+      batch1_room: "",
+      batch2_id: sectionBatches[1]?.id ?? "",
+      batch2_subject_id: "",
+      batch2_teacher_id: "",
+      batch2_room: "",
+    });
     setFormError(null);
   }
 
@@ -186,6 +272,15 @@ export function AdminTimetablePage() {
       label: e.label ?? "",
       notes: e.notes ?? "",
       period_order: e.period_order,
+      is_dual_batch: false,
+      batch1_id: sectionBatches[0]?.id ?? "",
+      batch1_subject_id: "",
+      batch1_teacher_id: "",
+      batch1_room: "",
+      batch2_id: sectionBatches[1]?.id ?? "",
+      batch2_subject_id: "",
+      batch2_teacher_id: "",
+      batch2_room: "",
     });
     setFormError(null);
   }
@@ -216,65 +311,219 @@ export function AdminTimetablePage() {
       setFormError("End time must be after start time.");
       return;
     }
+
+    const periodOrder = form.period_order || Math.max(1, Math.floor(timeToMinutes(form.start_time) / 5) + 1);
+
+    // Simultaneous Dual-Batch Lab mode
+    if (form.block_type === "lab" && form.is_dual_batch && !form.id) {
+      if (!form.batch1_id || !form.batch2_id) {
+        setFormError("Please select both lab batches.");
+        return;
+      }
+      if (form.batch1_id === form.batch2_id) {
+        setFormError("Please select two different batches for simultaneous lab.");
+        return;
+      }
+      if (!form.batch1_subject_id || !form.batch2_subject_id) {
+        setFormError("Please select subjects for both lab batches.");
+        return;
+      }
+      // Verify both batches belong to this section
+      const batch1Valid = sectionBatches.some((b) => b.id === form.batch1_id);
+      const batch2Valid = sectionBatches.some((b) => b.id === form.batch2_id);
+      if (!batch1Valid || !batch2Valid) {
+        setFormError("Both lab batches must belong to the selected section.");
+        return;
+      }
+
+      // Verify both subjects are valid lab subjects belonging to this section's semester
+      const s1Valid = sectionLabSubjects.some((s) => s.id === form.batch1_subject_id);
+      const s2Valid = sectionLabSubjects.some((s) => s.id === form.batch2_subject_id);
+      if (!s1Valid || !s2Valid) {
+        setFormError("Both subjects must be valid laboratory subjects in this semester curriculum.");
+        return;
+      }
+
+      // Verify teacher assignments match production database constraints
+      if (form.batch1_teacher_id) {
+        const isAssigned = eligibleTeachersBatch1.some((t) => t.id === form.batch1_teacher_id);
+        if (!isAssigned) {
+          setFormError("The selected teacher for Batch 1 is not assigned to this subject in this section.");
+          return;
+        }
+      }
+      if (form.batch2_teacher_id) {
+        const isAssigned = eligibleTeachersBatch2.some((t) => t.id === form.batch2_teacher_id);
+        if (!isAssigned) {
+          setFormError("The selected teacher for Batch 2 is not assigned to this subject in this section.");
+          return;
+        }
+      }
+
+      if (form.batch1_teacher_id && form.batch1_teacher_id === form.batch2_teacher_id) {
+        setFormError("The same teacher cannot teach both batches simultaneously.");
+        return;
+      }
+      if (form.batch1_room.trim() && form.batch1_room.trim().toLowerCase() === form.batch2_room.trim().toLowerCase()) {
+        setFormError("Both batches cannot occupy the same room simultaneously.");
+        return;
+      }
+
+      const candidate1: ValidationCandidate = {
+        id: null,
+        day_of_week: form.day_of_week,
+        start_time: form.start_time,
+        end_time: form.end_time,
+        block_type: "lab",
+        section_id: sectionId,
+        academic_year_id: yearId,
+        subject_id: form.batch1_subject_id || null,
+        teacher_id: form.batch1_teacher_id || null,
+        lab_batch_id: form.batch1_id,
+        room: form.batch1_room.trim(),
+      };
+      const candidate2: ValidationCandidate = {
+        id: null,
+        day_of_week: form.day_of_week,
+        start_time: form.start_time,
+        end_time: form.end_time,
+        block_type: "lab",
+        section_id: sectionId,
+        academic_year_id: yearId,
+        subject_id: form.batch2_subject_id || null,
+        teacher_id: form.batch2_teacher_id || null,
+        lab_batch_id: form.batch2_id,
+        room: form.batch2_room.trim(),
+      };
+
+      const res1 = checkTimetableClash(candidate1, allEntries);
+      if (!res1.valid) {
+        setFormError(`Batch 1: ${res1.error}`);
+        return;
+      }
+
+      const candidate1AsEntry: TimetableEntryLike = {
+        id: "temp-candidate-1",
+        academic_year_id: yearId,
+        section_id: sectionId,
+        day_of_week: candidate1.day_of_week,
+        start_time: candidate1.start_time,
+        end_time: candidate1.end_time,
+        subject_id: candidate1.subject_id,
+        teacher_id: candidate1.teacher_id,
+        room: candidate1.room || null,
+        lab_batch_id: candidate1.lab_batch_id,
+        block_type: candidate1.block_type,
+        is_current: true,
+      };
+
+      const res2 = checkTimetableClash(candidate2, [...allEntries, candidate1AsEntry]);
+      if (!res2.valid) {
+        setFormError(`Batch 2: ${res2.error}`);
+        return;
+      }
+
+      setSaving(true);
+      const payload1 = {
+        academic_year_id: yearId,
+        semester_id: semId,
+        section_id: sectionId,
+        day_of_week: form.day_of_week,
+        period_order: periodOrder,
+        start_time: form.start_time,
+        end_time: form.end_time,
+        subject_id: form.batch1_subject_id || null,
+        teacher_id: form.batch1_teacher_id || null,
+        room: form.batch1_room.trim() || null,
+        lab_batch_id: form.batch1_id,
+        block_type: "lab",
+        label: form.label.trim() || null,
+        notes: form.notes.trim() || null,
+      };
+      const payload2 = {
+        academic_year_id: yearId,
+        semester_id: semId,
+        section_id: sectionId,
+        day_of_week: form.day_of_week,
+        period_order: periodOrder,
+        start_time: form.start_time,
+        end_time: form.end_time,
+        subject_id: form.batch2_subject_id || null,
+        teacher_id: form.batch2_teacher_id || null,
+        room: form.batch2_room.trim() || null,
+        lab_batch_id: form.batch2_id,
+        block_type: "lab",
+        label: form.label.trim() || null,
+        notes: form.notes.trim() || null,
+      };
+
+      const { error: insErr } = await supabase.from("timetable_entries").insert([payload1, payload2]);
+      setSaving(false);
+      if (insErr) {
+        setFormError(friendlyDbError(insErr, "Timetable entries"));
+        return;
+      }
+      setForm(null);
+      await loadAll();
+      return;
+    }
+
+    // Standard Single Entry mode
     if (form.block_type === "lab" && !form.lab_batch_id) {
       setFormError("Select a lab batch for a lab block.");
       return;
+    }
+    if (form.block_type === "lab" && form.lab_batch_id) {
+      const batchValid = sectionBatches.some((b) => b.id === form.lab_batch_id);
+      if (!batchValid) {
+        setFormError("The selected lab batch does not belong to the selected section.");
+        return;
+      }
     }
     if ((form.block_type === "lecture" || form.block_type === "lab") && !form.subject_id) {
       setFormError("Select a subject for this block type.");
       return;
     }
-
-    const others = allEntries.filter((e) => e.id !== form.id && e.day_of_week === form.day_of_week);
-    const timeClash = (e: Entry) => rangesOverlap(form.start_time, form.end_time, e.start_time, e.end_time);
-
-    const exact = others.find(
-      (e) =>
-        e.section_id === sectionId &&
-        e.start_time.slice(0, 5) === form.start_time &&
-        e.end_time.slice(0, 5) === form.end_time &&
-        e.subject_id === (form.subject_id || null) &&
-        e.teacher_id === (form.teacher_id || null) &&
-        (e.room ?? "").trim().toLowerCase() === form.room.trim().toLowerCase() &&
-        e.lab_batch_id === (form.block_type === "lab" ? form.lab_batch_id || null : null) &&
-        e.block_type === form.block_type
-    );
-    if (exact) {
-      setFormError("A timetable entry with these exact details already exists.");
-      return;
-    }
-    const newBatch = form.block_type === "lab" ? form.lab_batch_id || null : null;
-    const sectionClash = others.find(
-      (e) =>
-        e.section_id === sectionId &&
-        timeClash(e) &&
-        (e.lab_batch_id === null || newBatch === null || e.lab_batch_id === newBatch)
-    );
-    if (sectionClash) {
-      setFormError(
-        `This section already has a class during this time (${formatTimeRange12(sectionClash.start_time, sectionClash.end_time)}).`
-      );
-      return;
-    }
-
-    if (form.teacher_id) {
-      const clash = others.find((e) => e.teacher_id === form.teacher_id && timeClash(e));
-      if (clash) {
-        setFormError(
-          `This teacher is already assigned during this time (${formatTimeRange12(clash.start_time, clash.end_time)}).`
-        );
+    if (form.subject_id) {
+      const subjectBelongsToSemester = sectionSubjects.some((s) => s.id === form.subject_id);
+      if (!subjectBelongsToSemester) {
+        setFormError("This subject does not belong to the same semester as the selected section.");
         return;
       }
     }
-    if (form.room.trim()) {
-      const roomNorm = form.room.trim().toLowerCase();
-      const clash = others.find((e) => (e.room ?? "").trim().toLowerCase() === roomNorm && timeClash(e));
-      if (clash) {
-        setFormError(
-          `This room is already occupied during this time (${formatTimeRange12(clash.start_time, clash.end_time)}).`
-        );
+    if (form.block_type === "lab" && form.subject_id) {
+      const isLab = sectionLabSubjects.some((s) => s.id === form.subject_id);
+      if (!isLab) {
+        setFormError("The selected subject is not a recognized laboratory subject for this semester.");
         return;
       }
+    }
+    if (form.teacher_id && form.subject_id) {
+      const isAssigned = eligibleTeachers.some((t) => t.id === form.teacher_id);
+      if (!isAssigned) {
+        setFormError("This teacher is not assigned to this subject in this section.");
+        return;
+      }
+    }
+
+    const candidate: ValidationCandidate = {
+      id: form.id,
+      day_of_week: form.day_of_week,
+      start_time: form.start_time,
+      end_time: form.end_time,
+      block_type: form.block_type,
+      section_id: sectionId,
+      academic_year_id: yearId,
+      subject_id: form.subject_id || null,
+      teacher_id: form.teacher_id || null,
+      lab_batch_id: form.block_type === "lab" ? form.lab_batch_id || null : null,
+      room: form.room.trim(),
+    };
+
+    const clashRes = checkTimetableClash(candidate, allEntries);
+    if (!clashRes.valid) {
+      setFormError(clashRes.error || "Timetable clash detected.");
+      return;
     }
 
     setSaving(true);
@@ -283,7 +532,7 @@ export function AdminTimetablePage() {
       semester_id: semId,
       section_id: sectionId,
       day_of_week: form.day_of_week,
-      period_order: Math.max(1, Math.floor(timeToMinutes(form.start_time) / 5) + 1),
+      period_order: periodOrder,
       start_time: form.start_time,
       end_time: form.end_time,
       subject_id: form.subject_id || null,
@@ -523,6 +772,11 @@ export function AdminTimetablePage() {
 
                           // Regular Period Slot with robust content-driven sizing and generous vertical breathing room
                           const cellEntries = entriesForSlot(d, col.start, col.end);
+                          const isLabCell = cellEntries.some((e) => e.block_type === "lab");
+                          const unscheduledBatch = isLabCell
+                            ? sectionBatches.find((b) => !cellEntries.some((e) => e.lab_batch_id === b.id))
+                            : null;
+
                           return (
                             <td
                               key={colIdx}
@@ -547,6 +801,15 @@ export function AdminTimetablePage() {
                                       {describeEntry(e)}
                                     </button>
                                   ))}
+                                  {unscheduledBatch && (
+                                    <button
+                                      onClick={() => openAddBatch(d, col.start, col.end, cellEntries)}
+                                      className="w-full py-1 rounded border border-dashed border-copper/50 hover:border-copper hover:bg-copper/5 text-[11px] font-medium text-copper-dark transition-all text-center"
+                                      title={`Schedule parallel batch (${unscheduledBatch.name})`}
+                                    >
+                                      + Add {unscheduledBatch.name}
+                                    </button>
+                                  )}
                                 </div>
                               )}
                             </td>
@@ -566,6 +829,7 @@ export function AdminTimetablePage() {
                 teachers={teachers}
                 batches={batches}
                 onAdd={openAdd}
+                onAddBatch={openAddBatch}
                 onEdit={openEdit}
               />
             </>
@@ -615,7 +879,15 @@ export function AdminTimetablePage() {
                 <label className="block text-xs font-medium text-inkmuted">Block type</label>
                 <select
                   value={form.block_type}
-                  onChange={(e) => setForm({ ...form, block_type: e.target.value })}
+                  onChange={(e) => {
+                    const nextType = e.target.value;
+                    setForm({
+                      ...form,
+                      block_type: nextType,
+                      subject_id: "",
+                      teacher_id: "",
+                    });
+                  }}
                   className={selectCls}
                 >
                   {BLOCK_TYPES.map((b) => <option key={b} value={b}>{b}</option>)}
@@ -641,58 +913,268 @@ export function AdminTimetablePage() {
               </div>
             </div>
 
-            {(form.block_type === "lecture" || form.block_type === "lab") && (
-              <>
-                <label className="mt-3 block text-xs font-medium text-inkmuted">Subject</label>
-                <select
-                  value={form.subject_id}
-                  onChange={(e) => setForm({ ...form, subject_id: e.target.value, teacher_id: "" })}
-                  className={selectCls}
-                >
-                  <option value="">Select subject…</option>
-                  {sectionSubjects.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}{s.code ? ` (${s.code})` : ""}
-                    </option>
-                  ))}
-                </select>
-
-                <label className="mt-3 block text-xs font-medium text-inkmuted">Teacher</label>
-                <select
-                  value={form.teacher_id}
-                  onChange={(e) => setForm({ ...form, teacher_id: e.target.value })}
-                  className={selectCls}
-                  disabled={!form.subject_id}
-                >
-                  <option value="">{form.subject_id ? "Select teacher…" : "Select a subject first"}</option>
-                  {eligibleTeachers.map((t) => (
-                    <option key={t.id} value={t.id}>{t.full_name || t.email}</option>
-                  ))}
-                </select>
-                {form.subject_id && eligibleTeachers.length === 0 && (
-                  <p className="mt-1 text-xs text-inkmuted">
-                    No teacher is assigned to this subject in this section yet — add one on Teacher Assignments first.
-                  </p>
-                )}
-              </>
+            {form.block_type === "lab" && !form.id && sectionBatches.length >= 2 && (
+              <div className="mt-3 rounded-lg border border-copper/30 bg-copper/5 p-3">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={form.is_dual_batch}
+                    onChange={(e) => setForm({ ...form, is_dual_batch: e.target.checked })}
+                    className="h-4 w-4 rounded border-line text-copper focus:ring-copper"
+                  />
+                  <span className="text-xs font-semibold text-ink">
+                    Simultaneous 2-Batch Lab ({sectionBatches[0]?.name} &amp; {sectionBatches[1]?.name})
+                  </span>
+                </label>
+                <p className="mt-1 text-[11px] text-inkmuted">
+                  Schedule two lab batches simultaneously with distinct subjects, teachers, and rooms.
+                </p>
+              </div>
             )}
 
-            {form.block_type === "lab" && (
+            {form.block_type === "lab" && form.is_dual_batch && !form.id ? (
               <>
-                <label className="mt-3 block text-xs font-medium text-inkmuted">Lab batch</label>
-                <select
-                  value={form.lab_batch_id}
-                  onChange={(e) => setForm({ ...form, lab_batch_id: e.target.value })}
-                  className={selectCls}
-                >
-                  <option value="">Select batch…</option>
-                  {sectionBatches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </select>
-                {sectionBatches.length === 0 && (
-                  <p className="mt-1 text-xs text-inkmuted">
-                    No lab batches exist for this section yet — create one on Lab Batches first.
-                  </p>
+                {/* Batch 1 Card */}
+                <div className="mt-3 rounded-lg border border-line bg-paper/50 p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-ink uppercase tracking-wider">Batch 1</span>
+                    <select
+                      value={form.batch1_id}
+                      onChange={(e) => setForm({ ...form, batch1_id: e.target.value, batch1_teacher_id: "" })}
+                      className="rounded border border-line bg-panel px-2 py-1 text-xs text-ink font-semibold"
+                    >
+                      {sectionBatches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <label className="block text-xs font-medium text-inkmuted">Subject</label>
+                  <select
+                    value={form.batch1_subject_id}
+                    onChange={(e) => setForm({ ...form, batch1_subject_id: e.target.value, batch1_teacher_id: "" })}
+                    className={selectCls}
+                    disabled={sectionLabSubjects.length === 0}
+                  >
+                    {sectionLabSubjects.length === 0 ? (
+                      <option value="">No laboratory subjects found for this semester</option>
+                    ) : (
+                      <option value="">Select lab subject…</option>
+                    )}
+                    {sectionLabSubjects.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}{s.code ? ` (${s.code})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {sectionLabSubjects.length === 0 && (
+                    <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
+                      No laboratory subjects are configured for this semester curriculum.
+                    </p>
+                  )}
+
+                  <label className="mt-2 block text-xs font-medium text-inkmuted">Teacher</label>
+                  <select
+                    value={form.batch1_teacher_id}
+                    onChange={(e) => setForm({ ...form, batch1_teacher_id: e.target.value })}
+                    className={selectCls}
+                    disabled={!form.batch1_subject_id}
+                  >
+                    <option value="">{form.batch1_subject_id ? "Select teacher…" : "Select a subject first"}</option>
+                    {eligibleTeachersBatch1.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.full_name || t.email}
+                      </option>
+                    ))}
+                  </select>
+                  {form.batch1_subject_id && eligibleTeachersBatch1.length === 0 && (
+                    <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">
+                      No teacher is assigned to this lab subject in this section yet. Configure the assignment in Teacher Assignments first.
+                    </p>
+                  )}
+
+                  <label className="mt-2 block text-xs font-medium text-inkmuted">Room</label>
+                  <input
+                    value={form.batch1_room}
+                    onChange={(e) => setForm({ ...form, batch1_room: e.target.value })}
+                    placeholder="e.g. AEC Lab / TB-EC-203"
+                    className={selectCls}
+                  />
+                </div>
+
+                {/* Batch 2 Card */}
+                <div className="mt-3 rounded-lg border border-line bg-paper/50 p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-ink uppercase tracking-wider">Batch 2</span>
+                    <select
+                      value={form.batch2_id}
+                      onChange={(e) => setForm({ ...form, batch2_id: e.target.value, batch2_teacher_id: "" })}
+                      className="rounded border border-line bg-panel px-2 py-1 text-xs text-ink font-semibold"
+                    >
+                      {sectionBatches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <label className="block text-xs font-medium text-inkmuted">Subject</label>
+                  <select
+                    value={form.batch2_subject_id}
+                    onChange={(e) => setForm({ ...form, batch2_subject_id: e.target.value, batch2_teacher_id: "" })}
+                    className={selectCls}
+                    disabled={sectionLabSubjects.length === 0}
+                  >
+                    {sectionLabSubjects.length === 0 ? (
+                      <option value="">No laboratory subjects found for this semester</option>
+                    ) : (
+                      <option value="">Select lab subject…</option>
+                    )}
+                    {sectionLabSubjects.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}{s.code ? ` (${s.code})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {sectionLabSubjects.length === 0 && (
+                    <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
+                      No laboratory subjects are configured for this semester curriculum.
+                    </p>
+                  )}
+
+                  <label className="mt-2 block text-xs font-medium text-inkmuted">Teacher</label>
+                  <select
+                    value={form.batch2_teacher_id}
+                    onChange={(e) => setForm({ ...form, batch2_teacher_id: e.target.value })}
+                    className={selectCls}
+                    disabled={!form.batch2_subject_id}
+                  >
+                    <option value="">{form.batch2_subject_id ? "Select teacher…" : "Select a subject first"}</option>
+                    {eligibleTeachersBatch2.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.full_name || t.email}
+                      </option>
+                    ))}
+                  </select>
+                  {form.batch2_subject_id && eligibleTeachersBatch2.length === 0 && (
+                    <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">
+                      No teacher is assigned to this lab subject in this section yet. Configure the assignment in Teacher Assignments first.
+                    </p>
+                  )}
+
+                  <label className="mt-2 block text-xs font-medium text-inkmuted">Room</label>
+                  <input
+                    value={form.batch2_room}
+                    onChange={(e) => setForm({ ...form, batch2_room: e.target.value })}
+                    placeholder="e.g. DSD Lab / TB-EC-204"
+                    className={selectCls}
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                {(form.block_type === "lecture" || form.block_type === "lab") && (
+                  <>
+                    <label className="mt-3 block text-xs font-medium text-inkmuted">Subject</label>
+                    <select
+                      value={form.subject_id}
+                      onChange={(e) => setForm({ ...form, subject_id: e.target.value, teacher_id: "" })}
+                      className={selectCls}
+                      disabled={form.block_type === "lab" && sectionLabSubjects.length === 0}
+                    >
+                      {form.block_type === "lab" && sectionLabSubjects.length === 0 ? (
+                        <option value="">No laboratory subjects found for this semester</option>
+                      ) : (
+                        <option value="">{form.block_type === "lab" ? "Select lab subject…" : "Select subject…"}</option>
+                      )}
+                      {displayedSubjects.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}{s.code ? ` (${s.code})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    {form.block_type === "lab" && sectionLabSubjects.length === 0 && (
+                      <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
+                        No laboratory subjects are configured for this semester curriculum.
+                      </p>
+                    )}
+
+                    <label className="mt-3 block text-xs font-medium text-inkmuted">Teacher</label>
+                    <select
+                      value={form.teacher_id}
+                      onChange={(e) => setForm({ ...form, teacher_id: e.target.value })}
+                      className={selectCls}
+                      disabled={!form.subject_id}
+                    >
+                      <option value="">{form.subject_id ? "Select teacher…" : "Select a subject first"}</option>
+                      {eligibleTeachers.map((t) => (
+                        <option key={t.id} value={t.id}>{t.full_name || t.email}</option>
+                      ))}
+                    </select>
+                    {form.subject_id && eligibleTeachers.length === 0 && (
+                      <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                        No teacher is assigned to this {form.block_type === "lab" ? "lab " : ""}subject in this section yet. Configure the assignment in Teacher Assignments first.
+                      </p>
+                    )}
+                  </>
                 )}
+
+                {form.block_type === "lab" && (
+                  <>
+                    <label className="mt-3 block text-xs font-medium text-inkmuted">Lab batch</label>
+                    <select
+                      value={form.lab_batch_id}
+                      onChange={(e) => setForm({ ...form, lab_batch_id: e.target.value })}
+                      className={selectCls}
+                    >
+                      <option value="">Select batch…</option>
+                      {sectionBatches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                    </select>
+                    {sectionBatches.length === 0 && (
+                      <p className="mt-1 text-xs text-inkmuted">
+                        No lab batches exist for this section yet — create one on Lab Batches first.
+                      </p>
+                    )}
+                  </>
+                )}
+
+                {form.id && form.block_type === "lab" && form.lab_batch_id && (() => {
+                  const companion = sectionEntries.find(
+                    (other) =>
+                      other.id !== form.id &&
+                      other.day_of_week === form.day_of_week &&
+                      rangesOverlap(form.start_time, form.end_time, other.start_time.slice(0, 5), other.end_time.slice(0, 5)) &&
+                      other.block_type === "lab"
+                  );
+                  if (!companion) return null;
+                  const companionBatch = batches.find((b) => b.id === companion.lab_batch_id);
+                  const companionSubj = subjects.find((s) => s.id === companion.subject_id);
+                  return (
+                    <div className="mt-3 rounded-md border border-line bg-paper/40 p-2 text-xs text-inkmuted flex items-center justify-between">
+                      <span>
+                        Parallel batch in this slot: <strong className="text-ink">{companionBatch?.name ?? "Other batch"}</strong> ({companionSubj?.name ?? "—"})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => openEdit(companion)}
+                        className="text-copper hover:underline text-xs font-semibold ml-2"
+                      >
+                        Edit companion
+                      </button>
+                    </div>
+                  );
+                })()}
+
+                <label className="mt-3 block text-xs font-medium text-inkmuted">Room</label>
+                <input
+                  value={form.room}
+                  onChange={(e) => setForm({ ...form, room: e.target.value })}
+                  placeholder="e.g. TB-EC-203"
+                  className={selectCls}
+                />
               </>
             )}
 
@@ -707,14 +1189,6 @@ export function AdminTimetablePage() {
                 />
               </>
             )}
-
-            <label className="mt-3 block text-xs font-medium text-inkmuted">Room</label>
-            <input
-              value={form.room}
-              onChange={(e) => setForm({ ...form, room: e.target.value })}
-              placeholder="e.g. TB-EC-203"
-              className={selectCls}
-            />
 
             <label className="mt-3 block text-xs font-medium text-inkmuted">Notes (optional)</label>
             <textarea
@@ -780,6 +1254,7 @@ function MobileDayView({
   teachers,
   batches,
   onAdd,
+  onAddBatch,
   onEdit,
 }: {
   days: number[];
@@ -788,6 +1263,7 @@ function MobileDayView({
   teachers: Teacher[];
   batches: Batch[];
   onAdd: (day: number, start?: string, end?: string) => void;
+  onAddBatch: (day: number, start: string, end: string, existingInSlot: Entry[]) => void;
   onEdit: (e: Entry) => void;
 }) {
   const [activeDay, setActiveDay] = useState(days[0]);
@@ -838,6 +1314,10 @@ function MobileDayView({
           }
 
           const cellEntries = entriesForSlot(activeDay, col.start, col.end);
+          const isLabCell = cellEntries.some((e) => e.block_type === "lab");
+          const unscheduledBatch = isLabCell
+            ? batches.find((b) => !cellEntries.some((e) => e.lab_batch_id === b.id))
+            : null;
 
           // Lightweight compact Free Period Card
           if (cellEntries.length === 0) {
@@ -910,6 +1390,14 @@ function MobileDayView({
                   </div>
                 );
               })}
+              {unscheduledBatch && (
+                <button
+                  onClick={() => onAddBatch(activeDay, col.start, col.end, cellEntries)}
+                  className="w-full py-1.5 rounded border border-dashed border-copper/50 hover:border-copper hover:bg-copper/5 text-[11px] font-semibold text-copper-dark transition-all text-center"
+                >
+                  + Add {unscheduledBatch.name} to this period
+                </button>
+              )}
             </div>
           );
         })}
