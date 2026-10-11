@@ -18,12 +18,12 @@ interface UserRow { id: string; full_name: string; email: string; role: string; 
 // data access of their own, so they can't expose anything beyond what's
 // already rendered on screen.
 export function AdminResultsPage() {
-  const [years, setYears] = useState<{ id: string; name: string }[]>([]);
+  const [years, setYears] = useState<{ id: string; name: string; is_current?: boolean }[]>([]);
   const [regs, setRegs] = useState<{ id: string; academic_year_id: string }[]>([]);
   const [programs, setPrograms] = useState<{ id: string; regulation_id: string }[]>([]);
   const [semesters, setSemesters] = useState<{ id: string; number: number; program_id: string }[]>([]);
   const [sections, setSections] = useState<{ id: string; name: string; semester_id: string; academic_year_id: string }[]>([]);
-  const [subjects, setSubjects] = useState<{ id: string; name: string; semester_id: string }[]>([]);
+  const [subjects, setSubjects] = useState<{ id: string; name: string; semester_id: string; order_number?: number }[]>([]);
   const [tests, setTests] = useState<TestRow[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [results, setResults] = useState<ResultRow[]>([]);
@@ -44,13 +44,13 @@ export function AdminResultsPage() {
     setError(null);
     setLoading(true);
     const [y, r, p, s, sec, subj, t, u, res] = await Promise.all([
-      supabase.from("academic_years").select("id, name"),
-      supabase.from("regulations").select("id, academic_year_id"),
-      supabase.from("programs").select("id, regulation_id"),
-      supabase.from("semesters").select("id, number, program_id"),
-      supabase.from("sections").select("id, name, semester_id, academic_year_id"),
-      supabase.from("subjects").select("id, name, semester_id"),
-      supabase.from("tests").select("id, title, subject_id, topic_id"),
+      supabase.from("academic_years").select("id, name, is_current").order("is_current", { ascending: false }).order("name", { ascending: false }),
+      supabase.from("regulations").select("id, academic_year_id").order("name"),
+      supabase.from("programs").select("id, regulation_id").order("name"),
+      supabase.from("semesters").select("id, number, program_id").order("number"),
+      supabase.from("sections").select("id, name, semester_id, academic_year_id").order("name"),
+      supabase.from("subjects").select("id, name, semester_id, order_number").order("order_number").order("name"),
+      supabase.from("tests").select("id, title, subject_id, topic_id").order("title"),
       supabase.from("users").select("id, full_name, email, role, usn"),
       supabase.from("results").select("id, student_id, test_id, score, total, created_at"),
     ]);
@@ -70,21 +70,47 @@ export function AdminResultsPage() {
 
   useEffect(() => { load(); }, []);
 
-  const students = useMemo(() => users.filter((u) => u.role === "student"), [users]);
+  const students = useMemo(
+    () =>
+      users
+        .filter((u) => u.role === "student")
+        .sort(
+          (a, b) =>
+            (a.full_name || a.email || "").localeCompare(b.full_name || b.email || "") ||
+            (a.usn ?? "").localeCompare(b.usn ?? "") ||
+            a.id.localeCompare(b.id)
+        ),
+    [users]
+  );
   const testById = useMemo(() => new Map(tests.map((t) => [t.id, t])), [tests]);
   const userById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
 
   const filteredSemesters = useMemo(() => {
     if (!yearId) return semesters;
     const progIds = new Set(regs.filter((r) => r.academic_year_id === yearId).flatMap((r) => programs.filter((p) => p.regulation_id === r.id).map((p) => p.id)));
-    return semesters.filter((s) => progIds.has(s.program_id));
+    return semesters.filter((s) => progIds.has(s.program_id)).sort((a, b) => a.number - b.number);
   }, [semesters, programs, regs, yearId]);
   const filteredSections = useMemo(
-    () => sections.filter((s) => (!yearId || s.academic_year_id === yearId) && (!semId || s.semester_id === semId)),
+    () =>
+      sections
+        .filter((s) => (!yearId || s.academic_year_id === yearId) && (!semId || s.semester_id === semId))
+        .sort((a, b) => a.name.localeCompare(b.name)),
     [sections, yearId, semId]
   );
-  const filteredSubjects = useMemo(() => subjects.filter((s) => !semId || s.semester_id === semId), [subjects, semId]);
-  const filteredTests = useMemo(() => tests.filter((t) => !subjectId || t.subject_id === subjectId), [tests, subjectId]);
+  const filteredSubjects = useMemo(
+    () =>
+      subjects
+        .filter((s) => !semId || s.semester_id === semId)
+        .sort((a, b) => (a.order_number ?? 0) - (b.order_number ?? 0) || a.name.localeCompare(b.name)),
+    [subjects, semId]
+  );
+  const filteredTests = useMemo(
+    () =>
+      tests
+        .filter((t) => !subjectId || t.subject_id === subjectId)
+        .sort((a, b) => (a.title || "").localeCompare(b.title || "")),
+    [tests, subjectId]
+  );
 
   useEffect(() => {
     async function loadSectionRoster() {

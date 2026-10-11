@@ -30,12 +30,12 @@ interface MarkRow {
 export function AdminIaPage() {
   const [tab, setTab] = useState<"configuration" | "marks">("configuration");
 
-  const [years, setYears] = useState<{ id: string; name: string }[]>([]);
+  const [years, setYears] = useState<{ id: string; name: string; is_current?: boolean }[]>([]);
   const [regs, setRegs] = useState<{ id: string; academic_year_id: string }[]>([]);
   const [programs, setPrograms] = useState<{ id: string; regulation_id: string }[]>([]);
   const [semesters, setSemesters] = useState<{ id: string; number: number; program_id: string }[]>([]);
   const [sections, setSections] = useState<{ id: string; name: string; semester_id: string; academic_year_id: string }[]>([]);
-  const [subjects, setSubjects] = useState<{ id: string; name: string; code: string | null; semester_id: string }[]>([]);
+  const [subjects, setSubjects] = useState<{ id: string; name: string; code: string | null; semester_id: string; order_number?: number }[]>([]);
   const [users, setUsers] = useState<{ id: string; full_name: string; email: string; role: string; usn: string | null }[]>([]);
 
   const [assessments, setAssessments] = useState<Assessment[]>([]);
@@ -66,12 +66,12 @@ export function AdminIaPage() {
     setError(null);
     setLoading(true);
     const [y, r, p, s, sec, subj, u, a, m] = await Promise.all([
-      supabase.from("academic_years").select("id, name"),
-      supabase.from("regulations").select("id, academic_year_id"),
-      supabase.from("programs").select("id, regulation_id"),
-      supabase.from("semesters").select("id, number, program_id"),
-      supabase.from("sections").select("id, name, semester_id, academic_year_id"),
-      supabase.from("subjects").select("id, name, code, semester_id"),
+      supabase.from("academic_years").select("id, name, is_current").order("is_current", { ascending: false }).order("name", { ascending: false }),
+      supabase.from("regulations").select("id, academic_year_id").order("name"),
+      supabase.from("programs").select("id, regulation_id").order("name"),
+      supabase.from("semesters").select("id, number, program_id").order("number"),
+      supabase.from("sections").select("id, name, semester_id, academic_year_id").order("name"),
+      supabase.from("subjects").select("id, name, code, semester_id, order_number").order("order_number").order("name"),
       supabase.from("users").select("id, full_name, email, role, usn"),
       supabase.from("ia_assessments").select("id, subject_id, ia_number, max_marks"),
       supabase.from("ia_marks").select("id, ia_assessment_id, student_id, marks_obtained, entered_by, updated_by, created_at, updated_at"),
@@ -97,25 +97,51 @@ export function AdminIaPage() {
     loadAll();
   }, []);
 
-  const students = useMemo(() => users.filter((u) => u.role === "student"), [users]);
+  const students = useMemo(
+    () =>
+      users
+        .filter((u) => u.role === "student")
+        .sort(
+          (a, b) =>
+            (a.full_name || a.email || "").localeCompare(b.full_name || b.email || "") ||
+            (a.usn ?? "").localeCompare(b.usn ?? "") ||
+            a.id.localeCompare(b.id)
+        ),
+    [users]
+  );
 
   const filteredSemesters = useMemo(() => {
     if (!yearId) return semesters;
     const progIds = new Set(regs.filter((r) => r.academic_year_id === yearId).flatMap((r) => programs.filter((p) => p.regulation_id === r.id).map((p) => p.id)));
-    return semesters.filter((s) => progIds.has(s.program_id));
+    return semesters.filter((s) => progIds.has(s.program_id)).sort((a, b) => a.number - b.number);
   }, [semesters, programs, regs, yearId]);
   const filteredSections = useMemo(
-    () => sections.filter((s) => (!yearId || s.academic_year_id === yearId) && (!semId || s.semester_id === semId)),
+    () =>
+      sections
+        .filter((s) => (!yearId || s.academic_year_id === yearId) && (!semId || s.semester_id === semId))
+        .sort((a, b) => a.name.localeCompare(b.name)),
     [sections, yearId, semId]
   );
-  const filteredSubjects = useMemo(() => subjects.filter((s) => !semId || s.semester_id === semId), [subjects, semId]);
+  const filteredSubjects = useMemo(
+    () =>
+      subjects
+        .filter((s) => !semId || s.semester_id === semId)
+        .sort((a, b) => (a.order_number ?? 0) - (b.order_number ?? 0) || a.name.localeCompare(b.name)),
+    [subjects, semId]
+  );
 
   const assessmentById = useMemo(() => new Map(assessments.map((a) => [a.id, a])), [assessments]);
 
   // ── Configuration tab: one row per subject × IA number, using the
   // subject list narrowed by Year/Semester filters (Section has no
   // bearing on subject-level config, since IA is subject-level by design).
-  const configSubjects = useMemo(() => (semId ? filteredSubjects : subjects), [filteredSubjects, subjects, semId]);
+  const configSubjects = useMemo(
+    () =>
+      (semId ? filteredSubjects : subjects).slice().sort(
+        (a, b) => (a.order_number ?? 0) - (b.order_number ?? 0) || a.name.localeCompare(b.name)
+      ),
+    [filteredSubjects, subjects, semId]
+  );
 
   function assessmentFor(subjectId: string, ia: number): Assessment | undefined {
     return assessments.find((a) => a.subject_id === subjectId && a.ia_number === ia);
