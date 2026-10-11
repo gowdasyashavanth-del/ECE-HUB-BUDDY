@@ -48,7 +48,7 @@ export function ClassTeachersPage() {
     setLoadError(null);
     setLoading(true);
     const [t, sec, asg] = await Promise.all([
-      supabase.from("users").select("id, full_name, email").eq("role", "teacher").order("full_name"),
+      supabase.from("users").select("id, full_name, email").eq("role", "teacher").order("full_name").order("email"),
       supabase
         .from("sections")
         .select("id, name, semesters(number, programs(name, regulations(name, academic_years(name))))")

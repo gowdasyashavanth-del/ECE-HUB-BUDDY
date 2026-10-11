@@ -61,7 +61,7 @@ export function MyStudentsPage() {
       setRosterErrors((prev) => ({ ...prev, [sectionId]: rosterErr.message }));
       return;
     }
-    const roster: RosterStudent[] = (data ?? []).map((r: any) => {
+    const rawRoster: RosterStudent[] = (data ?? []).map((r: any) => {
       const u = first<{ full_name: string; email: string; usn: string | null; xp: number; streak: number }>(r.users);
       return {
         student_id: r.student_id,
@@ -72,6 +72,11 @@ export function MyStudentsPage() {
         streak: u?.streak ?? 0,
       };
     });
+    const roster = [...rawRoster].sort(
+      (a, b) =>
+        (a.full_name || "").localeCompare(b.full_name || "") ||
+        (a.usn ?? a.email ?? "").localeCompare(b.usn ?? b.email ?? "")
+    );
     setRosterErrors((prev) => {
       const next = { ...prev };
       delete next[sectionId];

@@ -9,6 +9,7 @@ interface Student {
   id: string;
   full_name: string;
   email: string;
+  usn: string | null;
 }
 interface SectionRow {
   id: string;
@@ -55,7 +56,7 @@ export function CrDesignationsPage() {
         .order("name"),
       supabase
         .from("student_assignments")
-        .select("section_id, users(id, full_name, email)")
+        .select("section_id, users(id, full_name, email, usn)")
         .eq("is_current", true),
       supabase.from("cr_designations").select("id, student_id, section_id, designation").eq("is_current", true),
     ]);
@@ -83,6 +84,13 @@ export function CrDesignationsPage() {
       const u = first<Student>(row.users);
       if (!u) return;
       (bySection[row.section_id] ??= []).push(u);
+    });
+    Object.keys(bySection).forEach((secId) => {
+      bySection[secId].sort(
+        (a, b) =>
+          (a.full_name || "").localeCompare(b.full_name || "") ||
+          (a.usn ?? a.email ?? "").localeCompare(b.usn ?? b.email ?? "")
+      );
     });
     setStudentsBySection(bySection);
     setCrRows((cr.data ?? []) as CrRow[]);

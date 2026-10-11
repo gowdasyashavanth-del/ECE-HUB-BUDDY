@@ -43,7 +43,8 @@ export function StudentsPage() {
       .from("users")
       .select("id, email, full_name, phone, xp, usn")
       .eq("role", "student")
-      .order("full_name");
+      .order("full_name")
+      .order("usn");
 
     if (usersErr) {
       setError(friendlyDbError(usersErr, "Students"));

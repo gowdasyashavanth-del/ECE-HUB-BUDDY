@@ -59,7 +59,13 @@ export function TeacherLabBatchesPage() {
     ]);
     setRosterLoading(false);
     setBatches((batchRes.data ?? []) as Batch[]);
-    setRoster((rosterRes.data ?? []).map((r: any) => first<Student>(r.users)).filter(Boolean) as Student[]);
+    const rawRoster = (rosterRes.data ?? []).map((r: any) => first<Student>(r.users)).filter(Boolean) as Student[];
+    const sortedRoster = [...rawRoster].sort(
+      (a, b) =>
+        (a.full_name || "").localeCompare(b.full_name || "") ||
+        (a.usn ?? a.email ?? "").localeCompare(b.usn ?? b.email ?? "")
+    );
+    setRoster(sortedRoster);
     setAssignments((assignRes.data ?? []) as AssignmentRow[]);
   }
 
