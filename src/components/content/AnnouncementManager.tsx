@@ -9,7 +9,7 @@ import { ErrorState } from "../ui/ErrorState";
 import { EmptyState } from "../ui/EmptyState";
 import { Badge } from "../ui/Badge";
 
-interface Year { id: string; name: string; }
+interface Year { id: string; name: string; is_current?: boolean; }
 interface Reg { id: string; name: string; academic_year_id: string; }
 interface Prog { id: string; name: string; regulation_id: string; }
 interface Sem { id: string; number: number; program_id: string; }
@@ -66,11 +66,11 @@ export function AnnouncementManager() {
 
     if (isAdmin) {
       const [y, r, p, s, sec] = await Promise.all([
-        supabase.from("academic_years").select("id, name").order("name"),
-        supabase.from("regulations").select("id, name, academic_year_id"),
-        supabase.from("programs").select("id, name, regulation_id"),
-        supabase.from("semesters").select("id, number, program_id"),
-        supabase.from("sections").select("id, name, semester_id, academic_year_id"),
+        supabase.from("academic_years").select("id, name, is_current").order("is_current", { ascending: false }).order("name", { ascending: false }),
+        supabase.from("regulations").select("id, name, academic_year_id").order("name"),
+        supabase.from("programs").select("id, name, regulation_id").order("name"),
+        supabase.from("semesters").select("id, number, program_id").order("number"),
+        supabase.from("sections").select("id, name, semester_id, academic_year_id").order("name"),
       ]);
       const firstErr = [y, r, p, s, sec].find((res) => res.error);
       if (firstErr?.error) { setLoading(false); setLoadError(friendlyDbError(firstErr.error, "Academic structure")); return; }
@@ -104,6 +104,7 @@ export function AnnouncementManager() {
         const prog = sem ? first<{ name: string }>(sem.programs) : null;
         list.push({ section_id: r.section_id, label: `${prog?.name ?? "—"} · Sem ${sem?.number ?? "—"} · Section ${sec?.name ?? "—"}` });
       });
+      list.sort((a, b) => a.label.localeCompare(b.label));
       setTeacherSections(list);
     }
 
@@ -126,11 +127,23 @@ export function AnnouncementManager() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.id]);
 
-  const filteredRegs = useMemo(() => regs.filter((r) => r.academic_year_id === fYearId), [regs, fYearId]);
-  const filteredPrograms = useMemo(() => programs.filter((p) => p.regulation_id === fRegId), [programs, fRegId]);
-  const filteredSemesters = useMemo(() => semesters.filter((s) => s.program_id === fProgId), [semesters, fProgId]);
+  const filteredRegs = useMemo(
+    () => regs.filter((r) => r.academic_year_id === fYearId).sort((a, b) => a.name.localeCompare(b.name)),
+    [regs, fYearId]
+  );
+  const filteredPrograms = useMemo(
+    () => programs.filter((p) => p.regulation_id === fRegId).sort((a, b) => a.name.localeCompare(b.name)),
+    [programs, fRegId]
+  );
+  const filteredSemesters = useMemo(
+    () => semesters.filter((s) => s.program_id === fProgId).sort((a, b) => a.number - b.number),
+    [semesters, fProgId]
+  );
   const filteredSections = useMemo(
-    () => sections.filter((s) => s.semester_id === fSemId && s.academic_year_id === fYearId),
+    () =>
+      sections
+        .filter((s) => s.semester_id === fSemId && s.academic_year_id === fYearId)
+        .sort((a, b) => a.name.localeCompare(b.name)),
     [sections, fSemId, fYearId]
   );
 

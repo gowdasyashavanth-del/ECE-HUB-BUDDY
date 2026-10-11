@@ -7,9 +7,9 @@ import { LoadingState } from "../ui/LoadingState";
 import { ErrorState } from "../ui/ErrorState";
 import { EmptyState } from "../ui/EmptyState";
 
-interface Subject { id: string; name: string; }
-interface Unit { id: string; name: string; subject_id: string; }
-interface Topic { id: string; name: string; unit_id: string; }
+interface Subject { id: string; name: string; order_number?: number; }
+interface Unit { id: string; name: string; subject_id: string; order_number?: number; }
+interface Topic { id: string; name: string; unit_id: string; order_number?: number; }
 interface QuestionRow {
   id: string; topic_id: string; question_text: string;
   options: Record<string, string>; correct_answer: string; explanation: string | null; difficulty: string;
@@ -58,30 +58,41 @@ export function QuestionManager() {
 
     let subjectRows: Subject[] = [];
     if (isAdmin) {
-      const { data, error } = await supabase.from("subjects").select("id, name").order("name");
+      const { data, error } = await supabase.from("subjects").select("id, name, order_number").order("order_number").order("name");
       if (error) { setLoading(false); setLoadError(friendlyDbError(error, "Subjects")); return; }
       subjectRows = data ?? [];
     } else {
-      const { data, error } = await supabase.from("teacher_assignments").select("subjects(id, name)").eq("teacher_id", profile.id);
+      const { data, error } = await supabase.from("teacher_assignments").select("subjects(id, name, order_number)").eq("teacher_id", profile.id);
       if (error) { setLoading(false); setLoadError(friendlyDbError(error, "Your subjects")); return; }
       const first = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? v[0] ?? null : v);
       const seen = new Set<string>();
       subjectRows = (data ?? [])
         .map((r: any) => first<Subject>(r.subjects))
-        .filter((s): s is Subject => !!s && !seen.has(s.id) && (seen.add(s.id), true));
+        .filter((s): s is Subject => !!s && !seen.has(s.id) && (seen.add(s.id), true))
+        .sort((a, b) => (a.order_number ?? 0) - (b.order_number ?? 0) || a.name.localeCompare(b.name));
     }
     setSubjects(subjectRows);
 
     if (subjectRows.length === 0) { setUnits([]); setTopics([]); setRows([]); setLoading(false); return; }
 
-    const { data: unitRows, error: unitErr } = await supabase.from("units").select("id, name, subject_id").in("subject_id", subjectRows.map((s) => s.id));
+    const { data: unitRows, error: unitErr } = await supabase
+      .from("units")
+      .select("id, name, subject_id, order_number")
+      .in("subject_id", subjectRows.map((s) => s.id))
+      .order("order_number")
+      .order("name");
     if (unitErr) { setLoading(false); setLoadError(friendlyDbError(unitErr, "Units")); return; }
     setUnits(unitRows ?? []);
 
     const unitIds = (unitRows ?? []).map((u) => u.id);
     let topicRows: Topic[] = [];
     if (unitIds.length > 0) {
-      const { data, error } = await supabase.from("topics").select("id, name, unit_id").in("unit_id", unitIds);
+      const { data, error } = await supabase
+        .from("topics")
+        .select("id, name, unit_id, order_number")
+        .in("unit_id", unitIds)
+        .order("order_number")
+        .order("name");
       if (error) { setLoading(false); setLoadError(friendlyDbError(error, "Topics")); return; }
       topicRows = data ?? [];
     }
@@ -106,8 +117,14 @@ export function QuestionManager() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.id]);
 
-  const unitsForSubject = (subjectId: string) => units.filter((u) => u.subject_id === subjectId);
-  const topicsForUnit = (unitId: string) => topics.filter((t) => t.unit_id === unitId);
+  const unitsForSubject = (subjectId: string) =>
+    units
+      .filter((u) => u.subject_id === subjectId)
+      .sort((a, b) => (a.order_number ?? 0) - (b.order_number ?? 0) || a.name.localeCompare(b.name));
+  const topicsForUnit = (unitId: string) =>
+    topics
+      .filter((t) => t.unit_id === unitId)
+      .sort((a, b) => (a.order_number ?? 0) - (b.order_number ?? 0) || a.name.localeCompare(b.name));
 
   const visibleRows = useMemo(() => {
     if (!filterSubjectId) return rows;

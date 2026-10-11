@@ -31,12 +31,12 @@ interface AuditRow {
 export function AdminAttendancePage() {
   const [tab, setTab] = useState<"records" | "audit">("records");
 
-  const [years, setYears] = useState<{ id: string; name: string }[]>([]);
+  const [years, setYears] = useState<{ id: string; name: string; is_current?: boolean }[]>([]);
   const [semesters, setSemesters] = useState<{ id: string; number: number; program_id: string }[]>([]);
   const [programs, setPrograms] = useState<{ id: string; regulation_id: string }[]>([]);
   const [regs, setRegs] = useState<{ id: string; academic_year_id: string }[]>([]);
   const [sections, setSections] = useState<{ id: string; name: string; semester_id: string; academic_year_id: string }[]>([]);
-  const [subjects, setSubjects] = useState<{ id: string; name: string; semester_id: string }[]>([]);
+  const [subjects, setSubjects] = useState<{ id: string; name: string; semester_id: string; order_number?: number }[]>([]);
   const [users, setUsers] = useState<{ id: string; full_name: string; email: string; role: string; usn: string | null }[]>([]);
 
   const [records, setRecords] = useState<Rec[]>([]);
@@ -63,12 +63,12 @@ export function AdminAttendancePage() {
     setError(null);
     setLoading(true);
     const [y, r, p, s, sec, subj, u, rec, aud] = await Promise.all([
-      supabase.from("academic_years").select("id, name"),
-      supabase.from("regulations").select("id, academic_year_id"),
-      supabase.from("programs").select("id, regulation_id"),
-      supabase.from("semesters").select("id, number, program_id"),
-      supabase.from("sections").select("id, name, semester_id, academic_year_id"),
-      supabase.from("subjects").select("id, name, semester_id"),
+      supabase.from("academic_years").select("id, name, is_current").order("is_current", { ascending: false }).order("name", { ascending: false }),
+      supabase.from("regulations").select("id, academic_year_id").order("name"),
+      supabase.from("programs").select("id, regulation_id").order("name"),
+      supabase.from("semesters").select("id, number, program_id").order("number"),
+      supabase.from("sections").select("id, name, semester_id, academic_year_id").order("name"),
+      supabase.from("subjects").select("id, name, semester_id, order_number").order("order_number").order("name"),
       supabase.from("users").select("id, full_name, email, role, usn"),
       supabase.from("attendance_records").select("id, student_id, section_id, subject_id, attendance_date, status, recorded_by, updated_by").order("attendance_date", { ascending: false }),
       supabase.from("attendance_audit_log").select("id, attendance_id, previous_status, changed_by, changed_at").order("changed_at", { ascending: false }),
@@ -94,19 +94,45 @@ export function AdminAttendancePage() {
     loadAll();
   }, []);
 
-  const teachers = useMemo(() => users.filter((u) => u.role === "teacher"), [users]);
-  const students = useMemo(() => users.filter((u) => u.role === "student"), [users]);
+  const teachers = useMemo(
+    () =>
+      users
+        .filter((u) => u.role === "teacher")
+        .sort((a, b) => (a.full_name || a.email || "").localeCompare(b.full_name || b.email || "") || a.id.localeCompare(b.id)),
+    [users]
+  );
+  const students = useMemo(
+    () =>
+      users
+        .filter((u) => u.role === "student")
+        .sort(
+          (a, b) =>
+            (a.full_name || a.email || "").localeCompare(b.full_name || b.email || "") ||
+            (a.usn ?? "").localeCompare(b.usn ?? "") ||
+            a.id.localeCompare(b.id)
+        ),
+    [users]
+  );
 
   const filteredSemesters = useMemo(() => {
     if (!yearId) return semesters;
     const progIds = new Set(regs.filter((r) => r.academic_year_id === yearId).flatMap((r) => programs.filter((p) => p.regulation_id === r.id).map((p) => p.id)));
-    return semesters.filter((s) => progIds.has(s.program_id));
+    return semesters.filter((s) => progIds.has(s.program_id)).sort((a, b) => a.number - b.number);
   }, [semesters, programs, regs, yearId]);
   const filteredSections = useMemo(
-    () => sections.filter((s) => (!yearId || s.academic_year_id === yearId) && (!semId || s.semester_id === semId)),
+    () =>
+      sections
+        .filter((s) => (!yearId || s.academic_year_id === yearId) && (!semId || s.semester_id === semId))
+        .sort((a, b) => a.name.localeCompare(b.name)),
     [sections, yearId, semId]
   );
-  const filteredSubjects = useMemo(() => subjects.filter((s) => !semId || s.semester_id === semId), [subjects, semId]);
+  const filteredSubjects = useMemo(
+    () =>
+      subjects
+        .filter((s) => !semId || s.semester_id === semId)
+        .sort((a, b) => (a.order_number ?? 0) - (b.order_number ?? 0) || a.name.localeCompare(b.name)),
+    [subjects, semId]
+  );
 
   const filteredRecords = useMemo(() => {
     return records.filter((r) => {

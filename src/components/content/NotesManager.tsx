@@ -8,8 +8,8 @@ import { ErrorState } from "../ui/ErrorState";
 import { EmptyState } from "../ui/EmptyState";
 
 interface SectionRow { id: string; name: string; semester_id: string; semesterNumber: number | null; }
-interface SubjectRow { id: string; name: string; code: string | null; semester_id: string; }
-interface UnitRow { id: string; name: string; subject_id: string; }
+interface SubjectRow { id: string; name: string; code: string | null; semester_id: string; order_number?: number; }
+interface UnitRow { id: string; name: string; subject_id: string; order_number?: number; }
 // Notes-specific chapter entity — NOT the academic syllabus Topic.
 interface NoteChapterRow {
   id: string;
@@ -85,7 +85,7 @@ export function NotesManager() {
     if (isAdmin) {
       const [secRes, subRes] = await Promise.all([
         supabase.from("sections").select("id, name, semester_id, semesters(number)").order("name"),
-        supabase.from("subjects").select("id, name, code, semester_id").order("name"),
+        supabase.from("subjects").select("id, name, code, semester_id, order_number").order("order_number").order("name"),
       ]);
       if (secRes.error) { setLoading(false); setLoadError(friendlyDbError(secRes.error, "Sections")); return; }
       if (subRes.error) { setLoading(false); setLoadError(friendlyDbError(subRes.error, "Subjects")); return; }
@@ -101,7 +101,7 @@ export function NotesManager() {
       const first = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? v[0] ?? null : v);
       const [taRes, ctRes] = await Promise.all([
         supabase.from("teacher_assignments")
-          .select("section_id, subject_id, sections(name, semester_id, semesters(number)), subjects(name, code, semester_id)")
+          .select("section_id, subject_id, sections(name, semester_id, semesters(number)), subjects(name, code, semester_id, order_number)")
           .eq("teacher_id", profile.id),
         supabase.from("class_teacher_assignments")
           .select("section_id, sections(name, semester_id, semesters(number))")
@@ -117,7 +117,7 @@ export function NotesManager() {
         const sec = first<any>(r.sections);
         const sub = first<any>(r.subjects);
         if (sec) sectionMap.set(r.section_id, { id: r.section_id, name: sec.name, semester_id: sec.semester_id, semesterNumber: first<{ number: number }>(sec.semesters)?.number ?? null });
-        if (sub) subjectMap.set(r.subject_id, { id: r.subject_id, name: sub.name, code: sub.code, semester_id: sub.semester_id });
+        if (sub) subjectMap.set(r.subject_id, { id: r.subject_id, name: sub.name, code: sub.code, semester_id: sub.semester_id, order_number: sub.order_number });
         directPairs.push({ sectionId: r.section_id, subjectId: r.subject_id });
       }
       const ctSectionIds: string[] = [];
@@ -134,13 +134,17 @@ export function NotesManager() {
       ));
       if (ctSemesterIds.length > 0) {
         const { data: semSubjects, error: semSubErr } = await supabase
-          .from("subjects").select("id, name, code, semester_id").in("semester_id", ctSemesterIds);
+          .from("subjects").select("id, name, code, semester_id, order_number").in("semester_id", ctSemesterIds);
         if (semSubErr) { setLoading(false); setLoadError(friendlyDbError(semSubErr, "Subjects")); return; }
         for (const s of semSubjects ?? []) subjectMap.set(s.id, s as SubjectRow);
       }
 
-      setSections(Array.from(sectionMap.values()));
-      setSubjects(Array.from(subjectMap.values()));
+      setSections(Array.from(sectionMap.values()).sort((a, b) => a.name.localeCompare(b.name)));
+      setSubjects(
+        Array.from(subjectMap.values()).sort(
+          (a, b) => (a.order_number ?? 0) - (b.order_number ?? 0) || a.name.localeCompare(b.name)
+        )
+      );
       setPairs(directPairs);
     }
 
@@ -158,7 +162,11 @@ export function NotesManager() {
     const subjectIds = subjects.map((s) => s.id);
 
     const { data: unitRows, error: unitErr } = await supabase
-      .from("units").select("id, name, subject_id").in("subject_id", subjectIds);
+      .from("units")
+      .select("id, name, subject_id, order_number")
+      .in("subject_id", subjectIds)
+      .order("order_number")
+      .order("name");
     if (unitErr) { setLoadError(friendlyDbError(unitErr, "Units")); return; }
     setUnits(unitRows ?? []);
 
@@ -191,23 +199,32 @@ export function NotesManager() {
     if (!sectionId) return [];
     if (isAdmin) {
       const sec = sections.find((s) => s.id === sectionId);
-      return sec ? subjects.filter((sub) => sub.semester_id === sec.semester_id) : [];
+      return (sec ? subjects.filter((sub) => sub.semester_id === sec.semester_id) : []).sort(
+        (a, b) => (a.order_number ?? 0) - (b.order_number ?? 0) || a.name.localeCompare(b.name)
+      );
     }
     if (classTeacherSectionIds.includes(sectionId)) {
       const sec = sections.find((s) => s.id === sectionId);
-      return sec ? subjects.filter((sub) => sub.semester_id === sec.semester_id) : [];
+      return (sec ? subjects.filter((sub) => sub.semester_id === sec.semester_id) : []).sort(
+        (a, b) => (a.order_number ?? 0) - (b.order_number ?? 0) || a.name.localeCompare(b.name)
+      );
     }
     const subjectIds = new Set(pairs.filter((p) => p.sectionId === sectionId).map((p) => p.subjectId));
-    return subjects.filter((s) => subjectIds.has(s.id));
+    return subjects
+      .filter((s) => subjectIds.has(s.id))
+      .sort((a, b) => (a.order_number ?? 0) - (b.order_number ?? 0) || a.name.localeCompare(b.name));
   };
 
   const sectionsForPicker = useMemo(() => {
     if (isAdmin) return sections;
     const ids = new Set<string>([...pairs.map((p) => p.sectionId), ...classTeacherSectionIds]);
-    return sections.filter((s) => ids.has(s.id));
+    return sections.filter((s) => ids.has(s.id)).sort((a, b) => a.name.localeCompare(b.name));
   }, [sections, pairs, classTeacherSectionIds, isAdmin]);
 
-  const unitsForSubject = (subjectId: string) => units.filter((u) => u.subject_id === subjectId);
+  const unitsForSubject = (subjectId: string) =>
+    units
+      .filter((u) => u.subject_id === subjectId)
+      .sort((a, b) => (a.order_number ?? 0) - (b.order_number ?? 0) || a.name.localeCompare(b.name));
   const chaptersForUnit = (unitId: string) =>
     noteChapters.filter((c) => c.unit_id === unitId).sort((a, b) => a.display_order - b.display_order);
 
