@@ -22,6 +22,7 @@ interface StudentRow {
   student_id: string;
   full_name: string;
   email: string;
+  usn: string | null;
 }
 
 interface ResultDetail { score: number; total: number; created_at: string; test_title: string; }
@@ -116,7 +117,7 @@ export function StudentPerformancePage() {
       // restricts this to sections this teacher is actually assigned to.
       const { data: assignRows, error: assignErr } = await supabase!
         .from("student_assignments")
-        .select("student_id, users(full_name, email)")
+        .select("student_id, users(full_name, email, usn)")
         .eq("section_id", selectedAssignment!.section_id)
         .eq("is_current", true);
 
@@ -126,10 +127,21 @@ export function StudentPerformancePage() {
         return;
       }
 
-      const roster: StudentRow[] = (assignRows ?? []).map((r: any) => {
-        const u = first<{ full_name: string; email: string }>(r.users);
-        return { student_id: r.student_id, full_name: u?.full_name ?? "Unknown", email: u?.email ?? "—" };
+      const rawRoster: StudentRow[] = (assignRows ?? []).map((r: any) => {
+        const u = first<{ full_name: string; email: string; usn: string | null }>(r.users);
+        return {
+          student_id: r.student_id,
+          full_name: u?.full_name ?? "Unknown",
+          email: u?.email ?? "—",
+          usn: u?.usn ?? null,
+        };
       });
+
+      const roster = [...rawRoster].sort(
+        (a, b) =>
+          (a.full_name || "").localeCompare(b.full_name || "") ||
+          (a.usn ?? a.email ?? "").localeCompare(b.usn ?? b.email ?? "")
+      );
 
       if (roster.length === 0) {
         if (!cancelled) setStudents([]);

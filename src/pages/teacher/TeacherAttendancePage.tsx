@@ -10,9 +10,9 @@ import { EmptyState } from "../../components/ui/EmptyState";
 type Status = "present" | "absent" | "late" | "excused";
 const STATUSES: Status[] = ["present", "absent", "late", "excused"];
 
-interface Student { id: string; full_name: string; email: string; }
+interface Student { id: string; full_name: string; email: string; usn: string | null; }
 interface SectionOpt { id: string; name: string; }
-interface SubjectOpt { id: string; name: string; code: string | null; }
+interface SubjectOpt { id: string; name: string; code: string | null; order_number?: number; }
 interface Rec { id: string; student_id: string; status: Status; }
 
 const first = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? v[0] ?? null : v ?? null);
@@ -89,14 +89,19 @@ export function TeacherAttendancePage() {
 
       const rosterRes = await supabase
         .from("student_assignments")
-        .select("users(id, full_name, email)")
+        .select("users(id, full_name, email, usn)")
         .eq("section_id", sectionId)
         .eq("is_current", true);
       if (rosterRes.error) {
         setError("We couldn't load the class roster.");
         return;
       }
-      const roster = (rosterRes.data ?? []).map((r: any) => first<Student>(r.users)).filter(Boolean) as Student[];
+      const rawRoster = (rosterRes.data ?? []).map((r: any) => first<Student>(r.users)).filter(Boolean) as Student[];
+      const roster = [...rawRoster].sort(
+        (a, b) =>
+          (a.full_name || "").localeCompare(b.full_name || "") ||
+          (a.usn ?? a.email ?? "").localeCompare(b.usn ?? b.email ?? "")
+      );
       setStudents(roster);
 
       if (mode === "subject") {
@@ -116,14 +121,19 @@ export function TeacherAttendancePage() {
         // class mode: every subject taught in this section, matrix by student
         const subjRes = await supabase
           .from("teacher_assignments")
-          .select("subject_id, subjects(id, name, code)")
+          .select("subject_id, subjects(id, name, code, order_number)")
           .eq("section_id", sectionId);
         const uniqueSubjects = new Map<string, SubjectOpt>();
         (subjRes.data ?? []).forEach((r: any) => {
           const s = first<SubjectOpt>(r.subjects);
           if (s) uniqueSubjects.set(s.id, s);
         });
-        setSubjectsForClassMode(Array.from(uniqueSubjects.values()));
+        const sortedClassSubjects = Array.from(uniqueSubjects.values()).sort(
+          (a, b) =>
+            (a.order_number ?? 0) - (b.order_number ?? 0) ||
+            (a.name || "").localeCompare(b.name || "")
+        );
+        setSubjectsForClassMode(sortedClassSubjects);
 
         const attRes = await supabase
           .from("attendance_records")

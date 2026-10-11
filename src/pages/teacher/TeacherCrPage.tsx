@@ -55,7 +55,13 @@ export function TeacherCrPage() {
       supabase.from("cr_designations").select("id, student_id, designation").eq("section_id", sec).eq("is_current", true),
     ]);
     setRosterLoading(false);
-    setRoster((rosterRes.data ?? []).map((r: any) => first<Student>(r.users)).filter(Boolean) as Student[]);
+    const rawRoster = (rosterRes.data ?? []).map((r: any) => first<Student>(r.users)).filter(Boolean) as Student[];
+    const sortedRoster = [...rawRoster].sort(
+      (a, b) =>
+        (a.full_name || "").localeCompare(b.full_name || "") ||
+        (a.usn ?? a.email ?? "").localeCompare(b.usn ?? b.email ?? "")
+    );
+    setRoster(sortedRoster);
     setCrRows((crRes.data ?? []) as CrRow[]);
   }
 

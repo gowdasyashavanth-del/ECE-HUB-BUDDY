@@ -10,8 +10,8 @@ import { EmptyState } from "../../components/ui/EmptyState";
 const IA_NUMBERS = [1, 2, 3] as const;
 type IaNumber = 1 | 2 | 3;
 
-interface Student { id: string; full_name: string; email: string; }
-interface SubjectOpt { id: string; name: string; code: string | null; }
+interface Student { id: string; full_name: string; email: string; usn: string | null; }
+interface SubjectOpt { id: string; name: string; code: string | null; order_number?: number; }
 interface Assessment { id: string; subject_id: string; ia_number: number; max_marks: number; }
 interface MarkRow { id: string; student_id: string; marks_obtained: number; }
 
@@ -108,7 +108,7 @@ export function TeacherIaPage() {
       setFieldErrors({});
 
       const [rosterRes, assessRes] = await Promise.all([
-        supabase.from("student_assignments").select("users(id, full_name, email)").eq("section_id", sectionId).eq("is_current", true),
+        supabase.from("student_assignments").select("users(id, full_name, email, usn)").eq("section_id", sectionId).eq("is_current", true),
         supabase.from("ia_assessments").select("id, subject_id, ia_number, max_marks").eq("subject_id", subjectId).eq("ia_number", iaNumber).maybeSingle(),
       ]);
       setRosterLoading(false);
@@ -116,7 +116,12 @@ export function TeacherIaPage() {
         setError("We couldn't load the class roster.");
         return;
       }
-      const roster = (rosterRes.data ?? []).map((r: any) => first<Student>(r.users)).filter(Boolean) as Student[];
+      const rawRoster = (rosterRes.data ?? []).map((r: any) => first<Student>(r.users)).filter(Boolean) as Student[];
+      const roster = [...rawRoster].sort(
+        (a, b) =>
+          (a.full_name || "").localeCompare(b.full_name || "") ||
+          (a.usn ?? a.email ?? "").localeCompare(b.usn ?? b.email ?? "")
+      );
       setStudents(roster);
       const a = (assessRes.data as Assessment | null) ?? null;
       setAssessment(a);
@@ -146,22 +151,31 @@ export function TeacherIaPage() {
       setSaveResult(null);
 
       const [rosterRes, subjRes] = await Promise.all([
-        supabase.from("student_assignments").select("users(id, full_name, email)").eq("section_id", sectionId).eq("is_current", true),
-        supabase.from("teacher_assignments").select("subject_id, subjects(id, name, code)").eq("section_id", sectionId),
+        supabase.from("student_assignments").select("users(id, full_name, email, usn)").eq("section_id", sectionId).eq("is_current", true),
+        supabase.from("teacher_assignments").select("subject_id, subjects(id, name, code, order_number)").eq("section_id", sectionId),
       ]);
       setRosterLoading(false);
       if (rosterRes.error || subjRes.error) {
         setError("We couldn't load class IA data.");
         return;
       }
-      const roster = (rosterRes.data ?? []).map((r: any) => first<Student>(r.users)).filter(Boolean) as Student[];
+      const rawRoster = (rosterRes.data ?? []).map((r: any) => first<Student>(r.users)).filter(Boolean) as Student[];
+      const roster = [...rawRoster].sort(
+        (a, b) =>
+          (a.full_name || "").localeCompare(b.full_name || "") ||
+          (a.usn ?? a.email ?? "").localeCompare(b.usn ?? b.email ?? "")
+      );
       setStudents(roster);
       const uniqueSubjects = new Map<string, SubjectOpt>();
       (subjRes.data ?? []).forEach((r: any) => {
         const s = first<SubjectOpt>(r.subjects);
         if (s) uniqueSubjects.set(s.id, s);
       });
-      const subjectList = Array.from(uniqueSubjects.values());
+      const subjectList = Array.from(uniqueSubjects.values()).sort(
+        (a, b) =>
+          (a.order_number ?? 0) - (b.order_number ?? 0) ||
+          (a.name || "").localeCompare(b.name || "")
+      );
       setClassSubjects(subjectList);
 
       if (subjectList.length === 0) {
