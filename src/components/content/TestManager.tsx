@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { friendlyDbError } from "../../lib/supabaseErrors";
+import { batchInQuery } from "../../lib/supabaseUtils";
 import { useAuth } from "../../contexts/AuthContext";
 import { PageHeader } from "../ui/PageHeader";
 import { LoadingState } from "../ui/LoadingState";
@@ -29,6 +30,8 @@ export function TestManager() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [questionsBySubject, setQuestionsBySubject] = useState<Record<string, QuestionRow[]>>({});
+  const [questionsLoading, setQuestionsLoading] = useState(false);
+  const [questionsLoadError, setQuestionsLoadError] = useState<string | null>(null);
   const [tests, setTests] = useState<TestRow[]>([]);
 
   const [formOpen, setFormOpen] = useState(false);
@@ -66,33 +69,16 @@ export function TestManager() {
     if (subjectRows.length === 0) { setTests([]); setLoading(false); return; }
     const subjectIds = subjectRows.map((s) => s.id);
 
-    // Questions grouped by subject, via topic -> unit -> subject.
-    const { data: unitRows } = await supabase.from("units").select("id, subject_id").in("subject_id", subjectIds);
-    const { data: topicRows } = await supabase.from("topics").select("id, unit_id").in("unit_id", (unitRows ?? []).map((u) => u.id));
-    const topicToSubject = new Map<string, string>();
-    (topicRows ?? []).forEach((t) => {
-      const unit = (unitRows ?? []).find((u) => u.id === t.unit_id);
-      if (unit) topicToSubject.set(t.id, unit.subject_id);
-    });
-    const topicIds = (topicRows ?? []).map((t) => t.id);
-    let qBySubject: Record<string, QuestionRow[]> = {};
-    if (topicIds.length > 0) {
-      const { data: qRows, error: qErr } = await supabase.from("questions").select("id, topic_id, question_text").in("topic_id", topicIds);
-      if (qErr) { setLoading(false); setLoadError(friendlyDbError(qErr, "Questions")); return; }
-      (qRows ?? []).forEach((q) => {
-        const subjId = topicToSubject.get(q.topic_id);
-        if (!subjId) return;
-        (qBySubject[subjId] ??= []).push(q);
-      });
-    }
-    setQuestionsBySubject(qBySubject);
-
-    const { data: testRows, error: testErr } = await supabase
-      .from("tests")
-      .select("id, subject_id, title, question_ids, duration_min, is_published")
-      .in("subject_id", subjectIds);
+    const { data: testRows, error: testErr } = await batchInQuery<TestRow>(
+      (chunk) =>
+        supabase!
+          .from("tests")
+          .select("id, subject_id, title, question_ids, duration_min, is_published")
+          .in("subject_id", chunk),
+      subjectIds
+    );
     setLoading(false);
-    if (testErr) { setLoadError(friendlyDbError(testErr, "Tests")); return; }
+    if (testErr) { setLoadError(friendlyDbError(testErr as any, "Tests")); return; }
     setTests((testRows ?? []) as TestRow[]);
   }
 
@@ -100,6 +86,89 @@ export function TestManager() {
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.id]);
+
+  // On-demand loader: fetches questions only for the subject currently chosen in the editor.
+  // Avoids fetching questions across all subjects in the entire institution on initial mount.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadQuestionsForSubject(subjectId: string) {
+      if (!supabase || !subjectId) return;
+
+      // If already cached, reuse
+      if (questionsBySubject[subjectId]) return;
+
+      setQuestionsLoading(true);
+      setQuestionsLoadError(null);
+
+      // 1. Fetch units for the chosen subject
+      const { data: unitRows, error: unitErr } = await supabase
+        .from("units")
+        .select("id, subject_id")
+        .eq("subject_id", subjectId);
+
+      if (cancelled) return;
+      if (unitErr) {
+        setQuestionsLoading(false);
+        setQuestionsLoadError(friendlyDbError(unitErr, "Units"));
+        return;
+      }
+
+      const unitIds = (unitRows ?? []).map((u) => u.id);
+      if (unitIds.length === 0) {
+        if (!cancelled) {
+          setQuestionsBySubject((prev) => ({ ...prev, [subjectId]: [] }));
+          setQuestionsLoading(false);
+        }
+        return;
+      }
+
+      // 2. Fetch topics for those units (batched in case of many units)
+      const { data: topicRows, error: topicErr } = await batchInQuery<{ id: string; unit_id: string }>(
+        (chunk) => supabase!.from("topics").select("id, unit_id").in("unit_id", chunk),
+        unitIds
+      );
+
+      if (cancelled) return;
+      if (topicErr) {
+        setQuestionsLoading(false);
+        setQuestionsLoadError(friendlyDbError(topicErr as any, "Topics"));
+        return;
+      }
+
+      const topicIds = (topicRows ?? []).map((t) => t.id);
+      if (topicIds.length === 0) {
+        if (!cancelled) {
+          setQuestionsBySubject((prev) => ({ ...prev, [subjectId]: [] }));
+          setQuestionsLoading(false);
+        }
+        return;
+      }
+
+      // 3. Fetch questions for those topics (batched)
+      const { data: qRows, error: qErr } = await batchInQuery<QuestionRow>(
+        (chunk) => supabase!.from("questions").select("id, topic_id, question_text").in("topic_id", chunk),
+        topicIds
+      );
+
+      if (cancelled) return;
+      setQuestionsLoading(false);
+      if (qErr) {
+        setQuestionsLoadError(friendlyDbError(qErr as any, "Questions"));
+        return;
+      }
+
+      setQuestionsBySubject((prev) => ({ ...prev, [subjectId]: (qRows ?? []) as QuestionRow[] }));
+    }
+
+    if (formOpen && fSubjectId) {
+      loadQuestionsForSubject(fSubjectId);
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [formOpen, fSubjectId, questionsBySubject]);
 
   function subjectName(id: string | null) { return subjects.find((s) => s.id === id)?.name ?? "—"; }
 
@@ -215,13 +284,15 @@ export function TestManager() {
 
               <div className="mt-4">
                 <p className="text-xs font-medium text-inkmuted">
-                  Questions {fSubjectId && `(${availableQuestions.length} available for this subject)`}
+                  Questions {fSubjectId && !questionsLoading && `(${availableQuestions.length} available for this subject)`}
                 </p>
                 {!fSubjectId && <p className="mt-1 text-sm text-inkmuted">Select a subject first.</p>}
-                {fSubjectId && availableQuestions.length === 0 && (
+                {fSubjectId && questionsLoading && <p className="mt-1 text-sm text-inkmuted">Loading questions for this subject…</p>}
+                {fSubjectId && questionsLoadError && <p className="mt-1 text-sm text-danger">{questionsLoadError}</p>}
+                {fSubjectId && !questionsLoading && !questionsLoadError && availableQuestions.length === 0 && (
                   <p className="mt-1 text-sm text-inkmuted">No questions exist for this subject yet — add some on the Questions page first.</p>
                 )}
-                {availableQuestions.length > 0 && (
+                {fSubjectId && !questionsLoading && availableQuestions.length > 0 && (
                   <div className="mt-2 max-h-64 space-y-1.5 overflow-y-auto rounded-md border border-line p-2">
                     {availableQuestions.map((q) => (
                       <label key={q.id} className="flex items-start gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-paper">

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { friendlyDbError } from "../../lib/supabaseErrors";
+import { batchInQuery } from "../../lib/supabaseUtils";
 import { useAuth } from "../../contexts/AuthContext";
 import { PageHeader } from "../ui/PageHeader";
 import { LoadingState } from "../ui/LoadingState";
@@ -75,37 +76,55 @@ export function QuestionManager() {
 
     if (subjectRows.length === 0) { setUnits([]); setTopics([]); setRows([]); setLoading(false); return; }
 
-    const { data: unitRows, error: unitErr } = await supabase
-      .from("units")
-      .select("id, name, subject_id, order_number")
-      .in("subject_id", subjectRows.map((s) => s.id))
-      .order("order_number")
-      .order("name");
-    if (unitErr) { setLoading(false); setLoadError(friendlyDbError(unitErr, "Units")); return; }
-    setUnits(unitRows ?? []);
+    const subjectIds = subjectRows.map((s) => s.id);
+    const { data: unitRows, error: unitErr } = await batchInQuery<Unit>(
+      (chunk) =>
+        supabase!
+          .from("units")
+          .select("id, name, subject_id, order_number")
+          .in("subject_id", chunk)
+          .order("order_number")
+          .order("name"),
+      subjectIds
+    );
+    if (unitErr) { setLoading(false); setLoadError(friendlyDbError(unitErr as any, "Units")); return; }
+    const sortedUnits = (unitRows ?? []).slice().sort(
+      (a, b) => (a.order_number ?? 0) - (b.order_number ?? 0) || a.name.localeCompare(b.name)
+    );
+    setUnits(sortedUnits);
 
-    const unitIds = (unitRows ?? []).map((u) => u.id);
+    const unitIds = sortedUnits.map((u) => u.id);
     let topicRows: Topic[] = [];
     if (unitIds.length > 0) {
-      const { data, error } = await supabase
-        .from("topics")
-        .select("id, name, unit_id, order_number")
-        .in("unit_id", unitIds)
-        .order("order_number")
-        .order("name");
-      if (error) { setLoading(false); setLoadError(friendlyDbError(error, "Topics")); return; }
-      topicRows = data ?? [];
+      const { data, error } = await batchInQuery<Topic>(
+        (chunk) =>
+          supabase!
+            .from("topics")
+            .select("id, name, unit_id, order_number")
+            .in("unit_id", chunk)
+            .order("order_number")
+            .order("name"),
+        unitIds
+      );
+      if (error) { setLoading(false); setLoadError(friendlyDbError(error as any, "Topics")); return; }
+      topicRows = (data ?? []).slice().sort(
+        (a, b) => (a.order_number ?? 0) - (b.order_number ?? 0) || a.name.localeCompare(b.name)
+      );
     }
     setTopics(topicRows);
 
     const topicIds = topicRows.map((t) => t.id);
     let qRows: QuestionRow[] = [];
     if (topicIds.length > 0) {
-      const { data, error } = await supabase
-        .from("questions")
-        .select("id, topic_id, question_text, options, correct_answer, explanation, difficulty")
-        .in("topic_id", topicIds);
-      if (error) { setLoading(false); setLoadError(friendlyDbError(error, "Questions")); return; }
+      const { data, error } = await batchInQuery<QuestionRow>(
+        (chunk) =>
+          supabase!
+            .from("questions")
+            .select("id, topic_id, question_text, options, correct_answer, explanation, difficulty")
+            .in("topic_id", chunk),
+        topicIds
+      );
+      if (error) { setLoading(false); setLoadError(friendlyDbError(error as any, "Questions")); return; }
       qRows = (data ?? []) as QuestionRow[];
     }
     setRows(qRows);
