@@ -195,17 +195,33 @@ export function AnnouncementManager() {
     }
 
     setSaving(true);
-    const { error } = await supabase.from("announcements").insert({
-      title: fTitle.trim(),
-      body: fBody.trim(),
-      scope_type: isAdmin ? fScopeType : "section",
-      scope_id: scopeId,
-      created_by: profile?.id,
-    });
+    const { data: newRow, error } = await supabase
+      .from("announcements")
+      .insert({
+        title: fTitle.trim(),
+        body: fBody.trim(),
+        scope_type: isAdmin ? fScopeType : "section",
+        scope_id: scopeId,
+        created_by: profile?.id,
+      })
+      .select("id, title, body, scope_type, scope_id, created_at")
+      .single();
     setSaving(false);
     if (error) { setFormError(friendlyDbError(error, "Announcement")); return; }
     setFormOpen(false);
-    await loadAll();
+    if (newRow) {
+      setRows((prev) => [newRow as AnnouncementRow, ...prev]);
+      const newLabels = await resolveScopeLabels([newRow as AnnouncementLike]);
+      setScopeLabels((prev) => {
+        const merged = new Map(prev);
+        for (const [key, value] of newLabels.entries()) {
+          merged.set(key, value);
+        }
+        return merged;
+      });
+    } else {
+      await loadAll();
+    }
   }
 
   async function handleDelete(row: AnnouncementRow) {
@@ -214,7 +230,7 @@ export function AnnouncementManager() {
     setRowActionError(null);
     const { error } = await supabase.from("announcements").delete().eq("id", row.id);
     if (error) { setRowActionError(friendlyDbError(error, "Announcement")); return; }
-    await loadAll();
+    setRows((prev) => prev.filter((r) => r.id !== row.id));
   }
 
   const inputClass = "mt-1 w-full rounded-md border border-line bg-panel px-3 py-2 text-sm text-ink focus:border-copper focus:outline-none disabled:bg-paper disabled:text-inkmuted";

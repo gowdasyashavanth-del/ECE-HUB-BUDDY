@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { friendlyDbError } from "../../lib/supabaseErrors";
+import { useDebounce } from "../../hooks/useDebounce";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { LoadingState } from "../../components/ui/LoadingState";
 import { ErrorState } from "../../components/ui/ErrorState";
@@ -22,6 +23,7 @@ export function FormulaHubPage() {
   const [rows, setRows] = useState<FormulaRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 250);
 
   async function load() {
     if (!supabase) return;
@@ -41,9 +43,14 @@ export function FormulaHubPage() {
     load();
   }, []);
 
-  const filtered = rows?.filter(
-    (r) => !search.trim() || r.name.toLowerCase().includes(search.toLowerCase()) || r.expression.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = useMemo(() => {
+    if (!rows) return null;
+    const q = debouncedSearch.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(
+      (r) => r.name.toLowerCase().includes(q) || r.expression.toLowerCase().includes(q)
+    );
+  }, [rows, debouncedSearch]);
 
   return (
     <div>

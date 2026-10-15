@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { friendlyDbError } from "../../lib/supabaseErrors";
 import { useAuth } from "../../contexts/AuthContext";
+import { useDebounce } from "../../hooks/useDebounce";
 import { PageHeader } from "../ui/PageHeader";
 import { LoadingState } from "../ui/LoadingState";
 import { ErrorState } from "../ui/ErrorState";
@@ -25,6 +26,7 @@ export function ResultsViewer() {
   const [rows, setRows] = useState<ResultRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 250);
 
   async function load() {
     if (!supabase) return;
@@ -39,13 +41,20 @@ export function ResultsViewer() {
 
   useEffect(() => { load(); }, []);
 
-  const filtered = rows?.filter((r) => {
-    if (!search.trim()) return true;
-    const student = first<{ full_name: string; email: string }>(r.users as never);
-    const test = first<{ title: string }>(r.tests as never);
-    const q = search.toLowerCase();
-    return student?.full_name?.toLowerCase().includes(q) || student?.email?.toLowerCase().includes(q) || test?.title?.toLowerCase().includes(q);
-  });
+  const filtered = useMemo(() => {
+    if (!rows) return null;
+    const q = debouncedSearch.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => {
+      const student = first<{ full_name: string; email: string }>(r.users as never);
+      const test = first<{ title: string }>(r.tests as never);
+      return (
+        student?.full_name?.toLowerCase().includes(q) ||
+        student?.email?.toLowerCase().includes(q) ||
+        test?.title?.toLowerCase().includes(q)
+      );
+    });
+  }, [rows, debouncedSearch]);
 
   return (
     <div>

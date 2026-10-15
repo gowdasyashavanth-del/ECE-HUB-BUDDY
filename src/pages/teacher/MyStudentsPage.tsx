@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../contexts/AuthContext";
+import { batchInQuery } from "../../lib/supabaseUtils";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { LoadingState } from "../../components/ui/LoadingState";
 import { ErrorState } from "../../components/ui/ErrorState";
@@ -127,7 +128,59 @@ export function MyStudentsPage() {
 
       const groups = Array.from(bySection.values());
       setSections(groups);
-      groups.forEach((g) => loadRoster(g.section_id));
+
+      const sectionIds = groups.map((g) => g.section_id);
+      if (sectionIds.length === 0) return;
+
+      const { data: assignmentRows, error: assignErr } = await batchInQuery<{
+        section_id: string;
+        student_id: string;
+        users: any;
+      }>(
+        (chunk) =>
+          supabase!
+            .from("student_assignments")
+            .select("section_id, student_id, users(full_name, email, usn, xp, streak)")
+            .in("section_id", chunk)
+            .eq("is_current", true),
+        sectionIds
+      );
+
+      if (cancelled) return;
+
+      if (assignErr) {
+        groups.forEach((g) => loadRoster(g.section_id));
+        return;
+      }
+
+      const rostersBySection: Record<string, RosterStudent[]> = {};
+      for (const g of groups) {
+        rostersBySection[g.section_id] = [];
+      }
+
+      for (const r of assignmentRows ?? []) {
+        const u = first<{ full_name: string; email: string; usn: string | null; xp: number; streak: number }>(r.users);
+        if (rostersBySection[r.section_id]) {
+          rostersBySection[r.section_id].push({
+            student_id: r.student_id,
+            full_name: u?.full_name ?? "Unknown",
+            email: u?.email ?? "—",
+            usn: u?.usn ?? null,
+            xp: u?.xp ?? 0,
+            streak: u?.streak ?? 0,
+          });
+        }
+      }
+
+      for (const sid of Object.keys(rostersBySection)) {
+        rostersBySection[sid].sort(
+          (a, b) =>
+            (a.full_name || "").localeCompare(b.full_name || "") ||
+            (a.usn ?? a.email ?? "").localeCompare(b.usn ?? b.email ?? "")
+        );
+      }
+
+      setRosters(rostersBySection);
     }
 
     load();

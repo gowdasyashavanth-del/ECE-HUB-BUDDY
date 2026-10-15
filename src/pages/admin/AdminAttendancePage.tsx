@@ -176,13 +176,29 @@ export function AdminAttendancePage() {
   async function confirmEdit(rec: Rec) {
     if (!supabase) return;
     setRowError(null);
-    const { error } = await supabase.from("attendance_records").update({ status: editStatus }).eq("id", rec.id);
+    const { data: updatedRec, error } = await supabase
+      .from("attendance_records")
+      .update({ status: editStatus })
+      .eq("id", rec.id)
+      .select("id, student_id, section_id, subject_id, attendance_date, status, recorded_by, updated_by")
+      .single();
     if (error) {
       setRowError(friendlyDbError(error, "Attendance record"));
       return;
     }
     setEditingId(null);
-    await loadAll();
+    if (updatedRec) {
+      setRecords((prev) => prev.map((r) => (r.id === rec.id ? (updatedRec as Rec) : r)));
+      const { data: aud } = await supabase
+        .from("attendance_audit_log")
+        .select("id, attendance_id, previous_status, changed_by, changed_at")
+        .order("changed_at", { ascending: false });
+      if (aud) {
+        setAuditRows(aud as AuditRow[]);
+      }
+    } else {
+      await loadAll();
+    }
   }
 
   if (error) return <ErrorState message={error} onRetry={loadAll} />;

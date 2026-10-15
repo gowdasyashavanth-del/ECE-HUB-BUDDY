@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient";
+import { batchInQuery } from "./supabaseUtils";
 
 // announcements.scope_id has no real FK — its meaning depends on
 // scope_type (documented in 06_engagement_and_progress.sql: Postgres
@@ -47,12 +48,17 @@ export async function resolveScopeLabels(rows: AnnouncementLike[]): Promise<Map<
     byType.get(r.scope_type)!.add(r.scope_id);
   });
 
-  for (const [scopeType, ids] of byType) {
-    const cfg = SCOPE_TABLE[scopeType as Exclude<ScopeType, "all">];
-    if (!cfg) continue;
-    const { data } = await supabase.from(cfg.table).select(cfg.select).in("id", Array.from(ids));
-    (data ?? []).forEach((row: any) => labels.set(`${scopeType}:${row.id}`, cfg.label(row)));
-  }
+  await Promise.all(
+    Array.from(byType.entries()).map(async ([scopeType, ids]) => {
+      const cfg = SCOPE_TABLE[scopeType as Exclude<ScopeType, "all">];
+      if (!cfg) return;
+      const { data } = await batchInQuery<any>(
+        (chunk) => supabase!.from(cfg.table).select(cfg.select).in("id", chunk),
+        Array.from(ids)
+      );
+      (data ?? []).forEach((row: any) => labels.set(`${scopeType}:${row.id}`, cfg.label(row)));
+    })
+  );
 
   return labels;
 }

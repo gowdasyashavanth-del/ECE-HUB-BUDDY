@@ -201,13 +201,28 @@ export function QuestionManager() {
 
     setSaving(true);
     const query = editingId
-      ? supabase.from("questions").update(payload).eq("id", editingId)
-      : supabase.from("questions").insert(payload);
-    const { error } = await query;
+      ? supabase
+          .from("questions")
+          .update(payload)
+          .eq("id", editingId)
+          .select("id, topic_id, question_text, options, correct_answer, explanation, difficulty")
+          .single()
+      : supabase
+          .from("questions")
+          .insert(payload)
+          .select("id, topic_id, question_text, options, correct_answer, explanation, difficulty")
+          .single();
+    const { data: savedRow, error } = await query;
     setSaving(false);
     if (error) { setFormError(friendlyDbError(error, "Question")); return; }
     setFormOpen(false);
-    await loadAll();
+    if (editingId) {
+      setRows((prev) => prev.map((r) => (r.id === editingId ? (savedRow as QuestionRow) : r)));
+    } else if (savedRow) {
+      setRows((prev) => [savedRow as QuestionRow, ...prev]);
+    } else {
+      await loadAll();
+    }
   }
 
   async function handleDelete(row: QuestionRow) {
@@ -216,7 +231,7 @@ export function QuestionManager() {
     setRowActionError(null);
     const { error } = await supabase.from("questions").delete().eq("id", row.id);
     if (error) { setRowActionError(friendlyDbError(error, "Question")); return; }
-    await loadAll();
+    setRows((prev) => prev.filter((r) => r.id !== row.id));
   }
 
   const inputClass = "mt-1 w-full rounded-md border border-line bg-panel px-3 py-2 text-sm text-ink focus:border-copper focus:outline-none";
