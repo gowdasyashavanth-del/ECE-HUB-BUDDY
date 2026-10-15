@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { friendlyDbError } from "../../lib/supabaseErrors";
+import { batchInQuery } from "../../lib/supabaseUtils";
 import { useAuth } from "../../contexts/AuthContext";
 import { PageHeader } from "../ui/PageHeader";
 import { LoadingState } from "../ui/LoadingState";
@@ -116,39 +117,58 @@ export function ContentManager() {
     }
 
     const subjectIds = subjectRows.map((s) => s.id);
-    const { data: unitRows, error: unitErr } = await supabase
-      .from("units")
-      .select("id, name, subject_id, order_number")
-      .in("subject_id", subjectIds)
-      .order("order_number")
-      .order("name");
-    if (unitErr) { setLoading(false); setLoadError(friendlyDbError(unitErr, "Units")); return; }
-    setUnits(unitRows ?? []);
+    const { data: unitRows, error: unitErr } = await batchInQuery<Unit>(
+      (chunk) =>
+        supabase!
+          .from("units")
+          .select("id, name, subject_id, order_number")
+          .in("subject_id", chunk)
+          .order("order_number")
+          .order("name"),
+      subjectIds
+    );
+    if (unitErr) { setLoading(false); setLoadError(friendlyDbError(unitErr as any, "Units")); return; }
+    const sortedUnits = (unitRows ?? []).slice().sort(
+      (a, b) => (a.order_number ?? 0) - (b.order_number ?? 0) || a.name.localeCompare(b.name)
+    );
+    setUnits(sortedUnits);
 
-    const unitIds = (unitRows ?? []).map((u) => u.id);
+    const unitIds = sortedUnits.map((u) => u.id);
     let topicRows: Topic[] = [];
     if (unitIds.length > 0) {
-      const { data, error } = await supabase
-        .from("topics")
-        .select("id, name, unit_id, order_number")
-        .in("unit_id", unitIds)
-        .order("order_number")
-        .order("name");
-      if (error) { setLoading(false); setLoadError(friendlyDbError(error, "Topics")); return; }
-      topicRows = data ?? [];
+      const { data, error } = await batchInQuery<Topic>(
+        (chunk) =>
+          supabase!
+            .from("topics")
+            .select("id, name, unit_id, order_number")
+            .in("unit_id", chunk)
+            .order("order_number")
+            .order("name"),
+        unitIds
+      );
+      if (error) { setLoading(false); setLoadError(friendlyDbError(error as any, "Topics")); return; }
+      topicRows = (data ?? []).slice().sort(
+        (a, b) => (a.order_number ?? 0) - (b.order_number ?? 0) || a.name.localeCompare(b.name)
+      );
     }
     setTopics(topicRows);
 
     const topicIds = topicRows.map((t) => t.id);
     let contentRows: ContentRow[] = [];
     if (topicIds.length > 0) {
-      const { data, error } = await supabase
-        .from("content")
-        .select("id, topic_id, type, title, file_url, external_url, is_published, created_at")
-        .in("topic_id", topicIds)
-        .order("created_at", { ascending: false });
-      if (error) { setLoading(false); setLoadError(friendlyDbError(error, "Content")); return; }
-      contentRows = (data ?? []) as ContentRow[];
+      const { data, error } = await batchInQuery<ContentRow>(
+        (chunk) =>
+          supabase!
+            .from("content")
+            .select("id, topic_id, type, title, file_url, external_url, is_published, created_at")
+            .in("topic_id", chunk)
+            .order("created_at", { ascending: false }),
+        topicIds
+      );
+      if (error) { setLoading(false); setLoadError(friendlyDbError(error as any, "Content")); return; }
+      contentRows = (data ?? []).slice().sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
     }
     setRows(contentRows);
     setLoading(false);
