@@ -4,6 +4,7 @@ import { supabase } from "../../lib/supabaseClient";
 import { friendlyDbError } from "../../lib/supabaseErrors";
 import { fetchOverlapping } from "../../lib/plannerQueries";
 import { useAuth } from "../../contexts/AuthContext";
+import { useDebounce } from "../../hooks/useDebounce";
 import type { UserRole } from "../../lib/types";
 import {
   EVENT_GROUP_LABEL, EVENT_TYPES_BY_GROUP, EVENT_TYPE_META, PLANNER_SELECT, PRIORITY_LABEL, SCOPE_LABEL,
@@ -71,6 +72,7 @@ export function PlannerPage({ role }: { role: UserRole }) {
   const [reloadKey, setReloadKey] = useState(0);
 
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 250);
   const [typeFilter, setTypeFilter] = useState<"" | PlannerEventType>("");
   const [subjectFilter, setSubjectFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState<"" | PlannerPriority>("");
@@ -195,7 +197,7 @@ export function PlannerPage({ role }: { role: UserRole }) {
   }, [events]);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = debouncedSearch.trim().toLowerCase();
     return events.filter((e) => {
       if (typeFilter && e.event_type !== typeFilter) return false;
       if (subjectFilter && e.subject_id !== subjectFilter) return false;
@@ -204,7 +206,7 @@ export function PlannerPage({ role }: { role: UserRole }) {
       if (q && !`${e.title} ${e.description ?? ""} ${e.subjects?.name ?? ""}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [events, search, typeFilter, subjectFilter, priorityFilter, scopeFilter]);
+  }, [events, debouncedSearch, typeFilter, subjectFilter, priorityFilter, scopeFilter]);
 
   const listEvents = useMemo(() => {
     if (!hidePast) return filtered;

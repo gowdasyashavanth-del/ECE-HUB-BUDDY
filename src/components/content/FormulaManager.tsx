@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { friendlyDbError } from "../../lib/supabaseErrors";
+import { batchInQuery } from "../../lib/supabaseUtils";
 import { useAuth } from "../../contexts/AuthContext";
 import { PageHeader } from "../ui/PageHeader";
 import { LoadingState } from "../ui/LoadingState";
@@ -68,14 +69,20 @@ export function FormulaManager() {
       setRows([]); setLoading(false);
       return;
     }
-    const { data, error } = await supabase
-      .from("formulas")
-      .select("id, subject_id, name, expression, description, example")
-      .in("subject_id", subjectRows.map((s) => s.id))
-      .order("name");
+    const subjectIds = subjectRows.map((s) => s.id);
+    const { data, error } = await batchInQuery<FormulaRow>(
+      (chunk) =>
+        supabase!
+          .from("formulas")
+          .select("id, subject_id, name, expression, description, example")
+          .in("subject_id", chunk)
+          .order("name"),
+      subjectIds
+    );
     setLoading(false);
-    if (error) { setLoadError(friendlyDbError(error, "Formulas")); return; }
-    setRows((data ?? []) as FormulaRow[]);
+    if (error) { setLoadError(friendlyDbError(error as any, "Formulas")); return; }
+    const sorted = (data ?? []).slice().sort((a, b) => a.name.localeCompare(b.name));
+    setRows(sorted);
   }
 
   useEffect(() => {
@@ -122,13 +129,28 @@ export function FormulaManager() {
 
     setSaving(true);
     const query = editingId
-      ? supabase.from("formulas").update(payload).eq("id", editingId)
-      : supabase.from("formulas").insert(payload);
-    const { error } = await query;
+      ? supabase
+          .from("formulas")
+          .update(payload)
+          .eq("id", editingId)
+          .select("id, subject_id, name, expression, description, example")
+          .single()
+      : supabase
+          .from("formulas")
+          .insert(payload)
+          .select("id, subject_id, name, expression, description, example")
+          .single();
+    const { data: savedRow, error } = await query;
     setSaving(false);
     if (error) { setFormError(friendlyDbError(error, "Formula")); return; }
     setFormOpen(false);
-    await loadAll();
+    if (editingId) {
+      setRows((prev) => prev.map((r) => (r.id === editingId ? (savedRow as FormulaRow) : r)));
+    } else if (savedRow) {
+      setRows((prev) => [savedRow as FormulaRow, ...prev]);
+    } else {
+      await loadAll();
+    }
   }
 
   async function handleDelete(row: FormulaRow) {
@@ -137,7 +159,7 @@ export function FormulaManager() {
     setRowActionError(null);
     const { error } = await supabase.from("formulas").delete().eq("id", row.id);
     if (error) { setRowActionError(friendlyDbError(error, "Formula")); return; }
-    await loadAll();
+    setRows((prev) => prev.filter((r) => r.id !== row.id));
   }
 
   const inputClass = "mt-1 w-full rounded-md border border-line bg-panel px-3 py-2 text-sm text-ink focus:border-copper focus:outline-none";

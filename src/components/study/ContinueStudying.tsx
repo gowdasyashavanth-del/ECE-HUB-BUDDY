@@ -27,9 +27,11 @@ export function ContinueStudying({ fallback }: { fallback: string }) {
         .eq("student_id", profile.id)
         .order("completed_at", { ascending: false })
         .limit(10);
+      const seenTopics = new Set<string>();
       for (const row of (data ?? []) as any[]) {
         const c = first<{ title: string; topic_id: string }>(row.content);
-        if (!c) continue;
+        if (!c || seenTopics.has(c.topic_id)) continue;
+        seenTopics.add(c.topic_id);
         const { data: ctx } = await getTopicContext(c.topic_id);
         if (cancelled) return;
         if (ctx) { setState({ ctx, title: c.title }); return; }

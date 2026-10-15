@@ -296,9 +296,18 @@ export function ContentManager() {
     if (!editingId) payload.uploaded_by = profile?.id;
 
     const query = editingId
-      ? supabase.from("content").update(payload).eq("id", editingId)
-      : supabase.from("content").insert(payload);
-    const { error } = await query;
+      ? supabase
+          .from("content")
+          .update(payload)
+          .eq("id", editingId)
+          .select("id, topic_id, type, title, file_url, external_url, is_published, created_at")
+          .single()
+      : supabase
+          .from("content")
+          .insert(payload)
+          .select("id, topic_id, type, title, file_url, external_url, is_published, created_at")
+          .single();
+    const { data: savedRow, error } = await query;
     setSaving(false);
 
     if (error) {
@@ -306,7 +315,13 @@ export function ContentManager() {
       return;
     }
     setFormOpen(false);
-    await loadAll();
+    if (editingId) {
+      setRows((prev) => prev.map((r) => (r.id === editingId ? (savedRow as ContentRow) : r)));
+    } else if (savedRow) {
+      setRows((prev) => [savedRow as ContentRow, ...prev]);
+    } else {
+      await loadAll();
+    }
   }
 
   async function handleDelete(row: ContentRow) {
@@ -318,6 +333,7 @@ export function ContentManager() {
       setRowActionError(friendlyDbError(error, "Content"));
       return;
     }
+    setRows((prev) => prev.filter((r) => r.id !== row.id));
     // Best-effort storage cleanup. content_files_admin_delete already
     // restricts this DELETE to is_admin() at the storage-policy level —
     // this call can only ever succeed for the admin role that already
@@ -328,7 +344,6 @@ export function ContentManager() {
     if (isAdmin && row.file_url) {
       await supabase.storage.from(CONTENT_FILES_BUCKET).remove([row.file_url]);
     }
-    await loadAll();
   }
 
   async function handleViewFile(row: ContentRow) {

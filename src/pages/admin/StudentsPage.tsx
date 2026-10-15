@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { friendlyDbError } from "../../lib/supabaseErrors";
+import { useDebounce } from "../../hooks/useDebounce";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { LoadingState } from "../../components/ui/LoadingState";
 import { ErrorState } from "../../components/ui/ErrorState";
@@ -30,6 +31,7 @@ export function StudentsPage() {
   const [students, setStudents] = useState<StudentRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 250);
   const [editingUsnId, setEditingUsnId] = useState<string | null>(null);
   const [usnDraft, setUsnDraft] = useState("");
   const [usnError, setUsnError] = useState<string | null>(null);
@@ -82,13 +84,17 @@ export function StudentsPage() {
     load();
   }, []);
 
-  const filtered = students?.filter(
-    (s) =>
-      !search.trim() ||
-      s.full_name.toLowerCase().includes(search.toLowerCase()) ||
-      s.email.toLowerCase().includes(search.toLowerCase()) ||
-      (s.usn ?? "").toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = useMemo(() => {
+    if (!students) return null;
+    const q = debouncedSearch.trim().toLowerCase();
+    if (!q) return students;
+    return students.filter(
+      (s) =>
+        s.full_name.toLowerCase().includes(q) ||
+        s.email.toLowerCase().includes(q) ||
+        (s.usn ?? "").toLowerCase().includes(q)
+    );
+  }, [students, debouncedSearch]);
 
   async function saveUsn(studentId: string) {
     if (!supabase) return;

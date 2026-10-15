@@ -52,7 +52,6 @@ export default defineConfig({
         // — Workbox's navigateFallback never applies to fetch/XHR calls
         // like Supabase's, only to `mode: "navigate"` requests.
         navigateFallback: "/index.html",
-        navigateFallbackDenylist: [/^\/admin\/academic\//], // has its own dynamic :entityKey segment; avoid over-eager shell matches
         cleanupOutdatedCaches: true,
         // No runtimeCaching array — deliberately. Adding one is the one
         // change that could ever cause "Student A's data served to
@@ -62,6 +61,26 @@ export default defineConfig({
       devOptions: { enabled: false },
     }),
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const normalizedId = id.replace(/\\/g, "/");
+          if (
+            normalizedId.includes("/node_modules/react/") ||
+            normalizedId.includes("/node_modules/react-dom/") ||
+            normalizedId.includes("/node_modules/react-router/") ||
+            normalizedId.includes("/node_modules/react-router-dom/")
+          ) {
+            return "vendor-react";
+          }
+          if (normalizedId.includes("/node_modules/@supabase/")) {
+            return "vendor-supabase";
+          }
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
   },

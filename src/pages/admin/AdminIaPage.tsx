@@ -164,7 +164,14 @@ export function AdminIaPage() {
       return;
     }
     setEditingAssessment(null);
-    await loadAll();
+    const { data: newAssessments, error: aErr } = await supabase
+      .from("ia_assessments")
+      .select("id, subject_id, ia_number, max_marks");
+    if (!aErr && newAssessments) {
+      setAssessments(newAssessments as Assessment[]);
+    } else {
+      await loadAll();
+    }
   }
 
   // ── Marks tab ──
@@ -236,13 +243,22 @@ export function AdminIaPage() {
       setRowError(`Marks cannot exceed ${maxMarks}.`);
       return;
     }
-    const res = await supabase.from("ia_marks").update({ marks_obtained: value }).eq("id", mk.id);
+    const res = await supabase
+      .from("ia_marks")
+      .update({ marks_obtained: value })
+      .eq("id", mk.id)
+      .select("id, ia_assessment_id, student_id, marks_obtained, entered_by, updated_by, created_at, updated_at")
+      .single();
     if (res.error) {
       setRowError(friendlyDbError(res.error, "IA mark"));
       return;
     }
     setEditingMarkId(null);
-    await loadAll();
+    if (res.data) {
+      setMarks((prev) => prev.map((m) => (m.id === mk.id ? (res.data as MarkRow) : m)));
+    } else {
+      await loadAll();
+    }
   }
 
   if (error) return <ErrorState message={error} onRetry={loadAll} />;

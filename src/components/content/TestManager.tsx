@@ -216,13 +216,28 @@ export function TestManager() {
 
     setSaving(true);
     const query = editingId
-      ? supabase.from("tests").update(payload).eq("id", editingId)
-      : supabase.from("tests").insert({ ...payload, created_by: profile?.id });
-    const { error } = await query;
+      ? supabase
+          .from("tests")
+          .update(payload)
+          .eq("id", editingId)
+          .select("id, subject_id, title, question_ids, duration_min, is_published")
+          .single()
+      : supabase
+          .from("tests")
+          .insert({ ...payload, created_by: profile?.id })
+          .select("id, subject_id, title, question_ids, duration_min, is_published")
+          .single();
+    const { data: savedRow, error } = await query;
     setSaving(false);
     if (error) { setFormError(friendlyDbError(error, "Test")); return; }
     setFormOpen(false);
-    await loadAll();
+    if (editingId) {
+      setTests((prev) => prev.map((t) => (t.id === editingId ? (savedRow as TestRow) : t)));
+    } else if (savedRow) {
+      setTests((prev) => [savedRow as TestRow, ...prev]);
+    } else {
+      await loadAll();
+    }
   }
 
   async function handleDelete(row: TestRow) {
@@ -231,7 +246,7 @@ export function TestManager() {
     setRowActionError(null);
     const { error } = await supabase.from("tests").delete().eq("id", row.id);
     if (error) { setRowActionError(friendlyDbError(error, "Test")); return; }
-    await loadAll();
+    setTests((prev) => prev.filter((t) => t.id !== row.id));
   }
 
   const availableQuestions = useMemo(() => (fSubjectId ? questionsBySubject[fSubjectId] ?? [] : []), [fSubjectId, questionsBySubject]);

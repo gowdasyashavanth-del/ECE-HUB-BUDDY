@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -29,28 +30,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
 
-  const fetchProfile = useCallback(async (userId: string) => {
-    if (!supabase) return;
-    setProfileError(null);
-    // Role always comes from this DB row, never trusted from the JWT
-    // or from client state — the row itself is protected server-side
-    // by the RLS + trigger pattern in the approved migrations, so a
-    // student can never make this query return role: 'super_admin' for
-    // themselves no matter what the client does.
-    const { data, error } = await supabase
-      .from("users")
-      .select("id, email, full_name, phone, role, xp, streak, avatar_url, usn, created_at")
-      .eq("id", userId)
-      .single();
+  const inFlightPromiseRef = useRef<{ userId: string; promise: Promise<void> } | null>(null);
+  const loadedUserIdRef = useRef<string | null>(null);
 
-    if (error) {
-      setProfileError(
-        "We couldn't load your profile. This can happen right after signing up, or if the database isn't set up yet."
-      );
-      setProfile(null);
+  const fetchProfile = useCallback(async (userId: string, force = false) => {
+    if (!supabase) return;
+
+    if (!force && loadedUserIdRef.current === userId) {
       return;
     }
-    setProfile(data as Profile);
+
+    if (inFlightPromiseRef.current && inFlightPromiseRef.current.userId === userId) {
+      await inFlightPromiseRef.current.promise;
+      return;
+    }
+
+    setProfileError(null);
+
+    const promise = (async () => {
+      // Role always comes from this DB row, never trusted from the JWT
+      // or from client state — the row itself is protected server-side
+      // by the RLS + trigger pattern in the approved migrations, so a
+      // student can never make this query return role: 'super_admin' for
+      // themselves no matter what the client does.
+      const { data, error } = await supabase!
+        .from("users")
+        .select("id, email, full_name, phone, role, xp, streak, avatar_url, usn, created_at")
+        .eq("id", userId)
+        .single();
+
+      if (error) {
+        setProfileError(
+          "We couldn't load your profile. This can happen right after signing up, or if the database isn't set up yet."
+        );
+        setProfile(null);
+        loadedUserIdRef.current = null;
+        return;
+      }
+      setProfile(data as Profile);
+      loadedUserIdRef.current = userId;
+    })();
+
+    inFlightPromiseRef.current = { userId, promise };
+    try {
+      await promise;
+    } finally {
+      if (inFlightPromiseRef.current?.userId === userId) {
+        inFlightPromiseRef.current = null;
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -67,16 +95,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (data.session) {
         await fetchProfile(data.session.user.id);
       }
-      setLoading(false);
+      if (isMounted) setLoading(false);
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+      if (!isMounted) return;
       setSession(newSession);
       if (newSession) {
         await fetchProfile(newSession.user.id);
       } else {
+        loadedUserIdRef.current = null;
         setProfile(null);
       }
+      if (isMounted) setLoading(false);
     });
 
     return () => {
@@ -93,6 +124,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     if (!supabase) return;
+    loadedUserIdRef.current = null;
+    inFlightPromiseRef.current = null;
     await supabase.auth.signOut();
     setProfile(null);
     setSession(null);
@@ -121,7 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // full logout/login or auth state change event.
   const refreshProfile = useCallback(async () => {
     if (!session) return;
-    await fetchProfile(session.user.id);
+    await fetchProfile(session.user.id, true);
   }, [session, fetchProfile]);
 
   return (

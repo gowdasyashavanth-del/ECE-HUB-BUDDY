@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useDebounce } from "../../hooks/useDebounce";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { LoadingState } from "../../components/ui/LoadingState";
 import { ErrorState } from "../../components/ui/ErrorState";
@@ -25,6 +26,7 @@ export function TeacherAnalyticsPage() {
   const [roster, setRoster] = useState<RosterRow[]>([]);
   const [selected, setSelected] = useState(""); // "" = all my subject+section pairs
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 250);
   const [attention, setAttention] = useState<Attention>("all");
   const [loadingPairs, setLoadingPairs] = useState(true);
   const [loadingRoster, setLoadingRoster] = useState(true);
@@ -74,7 +76,7 @@ export function TeacherAnalyticsPage() {
   }), [shownPairs]);
 
   const visibleRoster = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = debouncedSearch.trim().toLowerCase();
     return roster.filter((r) => {
       if (q && !`${r.full_name} ${r.usn ?? ""}`.toLowerCase().includes(q)) return false;
       if (attention === "no_attempts") return r.tests_available > 0 && r.tests_attempted === 0;
@@ -82,7 +84,7 @@ export function TeacherAnalyticsPage() {
       if (attention === "inactive") return isInactive(r);
       return true;
     });
-  }, [roster, search, attention]);
+  }, [roster, debouncedSearch, attention]);
 
   if (loadingPairs) return <LoadingState label="Loading analytics…" />;
   if (error) return <ErrorState message={error} onRetry={retry} />;

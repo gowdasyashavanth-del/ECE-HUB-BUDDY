@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { isSupabaseConfigured } from "./lib/supabaseClient";
 import { AuthProvider } from "./contexts/AuthContext";
@@ -6,60 +7,73 @@ import { ConfigNeededPage } from "./pages/ConfigNeededPage";
 import { PortalSelectionPage } from "./pages/PortalSelectionPage";
 import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { PortalLoginPage } from "./pages/PortalLoginPage";
-import { ProfilePage } from "./pages/ProfilePage";
 import { NotFoundPage } from "./pages/NotFoundPage";
-import { StudentDashboard } from "./pages/student/StudentDashboard";
-import { StudentTimetablePage } from "./pages/student/StudentTimetablePage";
-import { StudentAttendancePage } from "./pages/student/StudentAttendancePage";
-import { StudentIaPage } from "./pages/student/StudentIaPage";
-import { TeacherDashboard } from "./pages/teacher/TeacherDashboard";
-import { AdminDashboard } from "./pages/admin/AdminDashboard";
-import { AcademicStructurePage } from "./pages/admin/AcademicStructurePage";
-import { AcademicEntityPage } from "./pages/admin/academic/AcademicEntityPage";
-import { TeachersPage } from "./pages/admin/TeachersPage";
-import { TeacherAssignmentsPage } from "./pages/admin/TeacherAssignmentsPage";
-import { ClassTeachersPage } from "./pages/admin/ClassTeachersPage";
-import { CrDesignationsPage } from "./pages/admin/CrDesignationsPage";
-import { LabBatchesPage } from "./pages/admin/LabBatchesPage";
-import { AdminTimetablePage } from "./pages/admin/AdminTimetablePage";
-import { AdminAttendancePage } from "./pages/admin/AdminAttendancePage";
-import { AdminIaPage } from "./pages/admin/AdminIaPage";
-import { AdminResultsPage } from "./pages/admin/AdminResultsPage";
-import { StudentsPage } from "./pages/admin/StudentsPage";
-import { StudentAssignmentsPage } from "./pages/admin/StudentAssignmentsPage";
-import { UserManagementPage } from "./pages/admin/UserManagementPage";
-import { ContentManager } from "./components/content/ContentManager";
-import { FormulaManager } from "./components/content/FormulaManager";
-import { QuestionManager } from "./components/content/QuestionManager";
-import { TestManager } from "./components/content/TestManager";
-import { ResultsViewer } from "./components/content/ResultsViewer";
-import { FormulaHubPage } from "./pages/student/FormulaHubPage";
-import { SubjectDetailPage } from "./pages/student/SubjectDetailPage";
-import { TestsListPage } from "./pages/student/TestsListPage";
-import { TakeTestPage } from "./pages/student/TakeTestPage";
-import { AnnouncementManager } from "./components/content/AnnouncementManager";
-import { AnnouncementsFeed } from "./pages/student/AnnouncementsFeed";
-import { ResultsHistoryPage } from "./pages/student/ResultsHistoryPage";
-import { StudentPerformancePage } from "./pages/teacher/StudentPerformancePage";
-import { MyStudentsPage } from "./pages/teacher/MyStudentsPage";
-import { TeacherTimetablePage } from "./pages/teacher/TeacherTimetablePage";
-import { TeacherAttendancePage } from "./pages/teacher/TeacherAttendancePage";
-import { TeacherIaPage } from "./pages/teacher/TeacherIaPage";
-import { TeacherCrPage } from "./pages/teacher/TeacherCrPage";
-import { TeacherLabBatchesPage } from "./pages/teacher/TeacherLabBatchesPage";
-import { TeacherSubjectWorkspacePage } from "./pages/teacher/TeacherSubjectWorkspacePage";
-import { NotesManager } from "./components/content/NotesManager";
-import { NotesPage } from "./pages/student/NotesPage";
-import { StudentPlannerPage } from "./pages/student/StudentPlannerPage";
-import { StudentAnalyticsPage } from "./pages/student/StudentAnalyticsPage";
-import { StudyModePage } from "./pages/student/StudyModePage";
-import { SmartStudyPage } from "./pages/student/SmartStudyPage";
-import { TeacherAnalyticsPage } from "./pages/teacher/TeacherAnalyticsPage";
-import { AdminAnalyticsPage } from "./pages/admin/AdminAnalyticsPage";
-import { TeacherPlannerPage } from "./pages/teacher/TeacherPlannerPage";
-import { AdminPlannerPage } from "./pages/admin/AdminPlannerPage";
 import { PWAInstallCard } from "./components/pwa/PWAInstallCard";
 import { PWAUpdateToast } from "./components/pwa/PWAUpdateToast";
+import { LoadingState } from "./components/ui/LoadingState";
+import { ErrorBoundary } from "./components/ui/ErrorBoundary";
+import { lazyNamed } from "./lib/lazyNamed";
+
+// Profile
+const ProfilePage = lazyNamed(() => import("./pages/ProfilePage"), "ProfilePage");
+
+// Student Pages
+const StudentDashboard = lazyNamed(() => import("./pages/student/StudentDashboard"), "StudentDashboard");
+const StudentTimetablePage = lazyNamed(() => import("./pages/student/StudentTimetablePage"), "StudentTimetablePage");
+const StudentAttendancePage = lazyNamed(() => import("./pages/student/StudentAttendancePage"), "StudentAttendancePage");
+const StudentIaPage = lazyNamed(() => import("./pages/student/StudentIaPage"), "StudentIaPage");
+const SubjectDetailPage = lazyNamed(() => import("./pages/student/SubjectDetailPage"), "SubjectDetailPage");
+const FormulaHubPage = lazyNamed(() => import("./pages/student/FormulaHubPage"), "FormulaHubPage");
+const TestsListPage = lazyNamed(() => import("./pages/student/TestsListPage"), "TestsListPage");
+const TakeTestPage = lazyNamed(() => import("./pages/student/TakeTestPage"), "TakeTestPage");
+const AnnouncementsFeed = lazyNamed(() => import("./pages/student/AnnouncementsFeed"), "AnnouncementsFeed");
+const ResultsHistoryPage = lazyNamed(() => import("./pages/student/ResultsHistoryPage"), "ResultsHistoryPage");
+const NotesPage = lazyNamed(() => import("./pages/student/NotesPage"), "NotesPage");
+const StudentPlannerPage = lazyNamed(() => import("./pages/student/StudentPlannerPage"), "StudentPlannerPage");
+const StudentAnalyticsPage = lazyNamed(() => import("./pages/student/StudentAnalyticsPage"), "StudentAnalyticsPage");
+const StudyModePage = lazyNamed(() => import("./pages/student/StudyModePage"), "StudyModePage");
+const SmartStudyPage = lazyNamed(() => import("./pages/student/SmartStudyPage"), "SmartStudyPage");
+
+// Teacher Pages
+const TeacherDashboard = lazyNamed(() => import("./pages/teacher/TeacherDashboard"), "TeacherDashboard");
+const TeacherSubjectWorkspacePage = lazyNamed(() => import("./pages/teacher/TeacherSubjectWorkspacePage"), "TeacherSubjectWorkspacePage");
+const StudentPerformancePage = lazyNamed(() => import("./pages/teacher/StudentPerformancePage"), "StudentPerformancePage");
+const MyStudentsPage = lazyNamed(() => import("./pages/teacher/MyStudentsPage"), "MyStudentsPage");
+const TeacherTimetablePage = lazyNamed(() => import("./pages/teacher/TeacherTimetablePage"), "TeacherTimetablePage");
+const TeacherAttendancePage = lazyNamed(() => import("./pages/teacher/TeacherAttendancePage"), "TeacherAttendancePage");
+const TeacherIaPage = lazyNamed(() => import("./pages/teacher/TeacherIaPage"), "TeacherIaPage");
+const TeacherCrPage = lazyNamed(() => import("./pages/teacher/TeacherCrPage"), "TeacherCrPage");
+const TeacherLabBatchesPage = lazyNamed(() => import("./pages/teacher/TeacherLabBatchesPage"), "TeacherLabBatchesPage");
+const TeacherPlannerPage = lazyNamed(() => import("./pages/teacher/TeacherPlannerPage"), "TeacherPlannerPage");
+const TeacherAnalyticsPage = lazyNamed(() => import("./pages/teacher/TeacherAnalyticsPage"), "TeacherAnalyticsPage");
+
+// Admin Pages
+const AdminDashboard = lazyNamed(() => import("./pages/admin/AdminDashboard"), "AdminDashboard");
+const AdminAnalyticsPage = lazyNamed(() => import("./pages/admin/AdminAnalyticsPage"), "AdminAnalyticsPage");
+const AdminPlannerPage = lazyNamed(() => import("./pages/admin/AdminPlannerPage"), "AdminPlannerPage");
+const AcademicStructurePage = lazyNamed(() => import("./pages/admin/AcademicStructurePage"), "AcademicStructurePage");
+const AcademicEntityPage = lazyNamed(() => import("./pages/admin/academic/AcademicEntityPage"), "AcademicEntityPage");
+const TeachersPage = lazyNamed(() => import("./pages/admin/TeachersPage"), "TeachersPage");
+const TeacherAssignmentsPage = lazyNamed(() => import("./pages/admin/TeacherAssignmentsPage"), "TeacherAssignmentsPage");
+const ClassTeachersPage = lazyNamed(() => import("./pages/admin/ClassTeachersPage"), "ClassTeachersPage");
+const CrDesignationsPage = lazyNamed(() => import("./pages/admin/CrDesignationsPage"), "CrDesignationsPage");
+const LabBatchesPage = lazyNamed(() => import("./pages/admin/LabBatchesPage"), "LabBatchesPage");
+const AdminTimetablePage = lazyNamed(() => import("./pages/admin/AdminTimetablePage"), "AdminTimetablePage");
+const AdminAttendancePage = lazyNamed(() => import("./pages/admin/AdminAttendancePage"), "AdminAttendancePage");
+const AdminIaPage = lazyNamed(() => import("./pages/admin/AdminIaPage"), "AdminIaPage");
+const AdminResultsPage = lazyNamed(() => import("./pages/admin/AdminResultsPage"), "AdminResultsPage");
+const UserManagementPage = lazyNamed(() => import("./pages/admin/UserManagementPage"), "UserManagementPage");
+const StudentsPage = lazyNamed(() => import("./pages/admin/StudentsPage"), "StudentsPage");
+const StudentAssignmentsPage = lazyNamed(() => import("./pages/admin/StudentAssignmentsPage"), "StudentAssignmentsPage");
+
+// Content & Learning Managers
+const ContentManager = lazyNamed(() => import("./components/content/ContentManager"), "ContentManager");
+const FormulaManager = lazyNamed(() => import("./components/content/FormulaManager"), "FormulaManager");
+const QuestionManager = lazyNamed(() => import("./components/content/QuestionManager"), "QuestionManager");
+const TestManager = lazyNamed(() => import("./components/content/TestManager"), "TestManager");
+const ResultsViewer = lazyNamed(() => import("./components/content/ResultsViewer"), "ResultsViewer");
+const NotesManager = lazyNamed(() => import("./components/content/NotesManager"), "NotesManager");
+const AnnouncementManager = lazyNamed(() => import("./components/content/AnnouncementManager"), "AnnouncementManager");
 
 export default function App() {
   if (!isSupabaseConfigured) {
@@ -70,7 +84,15 @@ export default function App() {
     <AuthProvider>
       <PWAInstallCard />
       <PWAUpdateToast />
-      <Routes>
+      <ErrorBoundary>
+        <Suspense
+          fallback={
+            <div className="flex min-h-[50vh] items-center justify-center p-6">
+              <LoadingState label="Loading page…" />
+            </div>
+          }
+        >
+          <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<PortalSelectionPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
@@ -561,6 +583,8 @@ export default function App() {
 
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
+        </Suspense>
+      </ErrorBoundary>
     </AuthProvider>
   );
 }

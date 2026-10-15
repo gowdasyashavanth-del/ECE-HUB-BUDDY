@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { friendlyDbError } from "../../lib/supabaseErrors";
+import { batchInQuery } from "../../lib/supabaseUtils";
 import { useAuth } from "../../contexts/AuthContext";
 import { PageHeader } from "../ui/PageHeader";
 import { LoadingState } from "../ui/LoadingState";
@@ -160,34 +161,60 @@ export function NotesManager() {
   async function loadUnitsChaptersNotes() {
     if (!supabase || subjects.length === 0) { setUnits([]); setNoteChapters([]); setNotes([]); return; }
     const subjectIds = subjects.map((s) => s.id);
-
-    const { data: unitRows, error: unitErr } = await supabase
-      .from("units")
-      .select("id, name, subject_id, order_number")
-      .in("subject_id", subjectIds)
-      .order("order_number")
-      .order("name");
-    if (unitErr) { setLoadError(friendlyDbError(unitErr, "Units")); return; }
-    setUnits(unitRows ?? []);
-
-    // Load Notes-specific chapters (NOT academic topics).
-    const { data: chapterRows, error: chapterErr } = await supabase
-      .from("note_chapters")
-      .select("id, name, unit_id, subject_id, topic_id, display_order")
-      .in("subject_id", subjectIds)
-      .order("display_order");
-    if (chapterErr) { setLoadError(friendlyDbError(chapterErr, "Chapters")); return; }
-    setNoteChapters((chapterRows ?? []) as NoteChapterRow[]);
-
     const sectionIds = sections.map((s) => s.id);
-    if (sectionIds.length === 0) { setNotes([]); return; }
-    const { data: noteRows, error: noteErr } = await supabase
-      .from("notes")
-      .select("id, section_id, subject_id, note_chapter_id, title, file_path, file_size_bytes, uploaded_by_name, uploaded_by_role, created_at")
-      .in("section_id", sectionIds)
-      .order("created_at", { ascending: false });
-    if (noteErr) { setLoadError(friendlyDbError(noteErr, "Notes")); return; }
-    setNotes((noteRows ?? []) as NoteRow[]);
+
+    const unitsPromise = batchInQuery<UnitRow>(
+      (chunk) =>
+        supabase!
+          .from("units")
+          .select("id, name, subject_id, order_number")
+          .in("subject_id", chunk)
+          .order("order_number")
+          .order("name"),
+      subjectIds
+    );
+
+    const chaptersPromise = batchInQuery<NoteChapterRow>(
+      (chunk) =>
+        supabase!
+          .from("note_chapters")
+          .select("id, name, unit_id, subject_id, topic_id, display_order")
+          .in("subject_id", chunk)
+          .order("display_order"),
+      subjectIds
+    );
+
+    const notesPromise = sectionIds.length > 0
+      ? batchInQuery<NoteRow>(
+          (chunk) =>
+            supabase!
+              .from("notes")
+              .select("id, section_id, subject_id, note_chapter_id, title, file_path, file_size_bytes, uploaded_by_name, uploaded_by_role, created_at")
+              .in("section_id", chunk)
+              .order("created_at", { ascending: false }),
+          sectionIds
+        )
+      : Promise.resolve({ data: [] as NoteRow[], error: null });
+
+    const [unitRes, chapterRes, noteRes] = await Promise.all([unitsPromise, chaptersPromise, notesPromise]);
+
+    if (unitRes.error) { setLoadError(friendlyDbError(unitRes.error as any, "Units")); return; }
+    if (chapterRes.error) { setLoadError(friendlyDbError(chapterRes.error as any, "Chapters")); return; }
+    if (noteRes.error) { setLoadError(friendlyDbError(noteRes.error as any, "Notes")); return; }
+
+    const sortedUnits = (unitRes.data ?? []).slice().sort(
+      (a, b) => (a.order_number ?? 0) - (b.order_number ?? 0) || a.name.localeCompare(b.name)
+    );
+    const sortedChapters = (chapterRes.data ?? []).slice().sort(
+      (a, b) => (a.display_order ?? 0) - (b.display_order ?? 0) || a.name.localeCompare(b.name)
+    );
+    const sortedNotes = (noteRes.data ?? []).slice().sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+
+    setUnits(sortedUnits);
+    setNoteChapters(sortedChapters);
+    setNotes(sortedNotes);
   }
 
   useEffect(() => {

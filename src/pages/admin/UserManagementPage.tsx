@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../../lib/supabaseClient";
 import { friendlyDbError } from "../../lib/supabaseErrors";
+import { useDebounce } from "../../hooks/useDebounce";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { LoadingState } from "../../components/ui/LoadingState";
 import { ErrorState } from "../../components/ui/ErrorState";
@@ -77,6 +78,7 @@ export function UserManagementPage() {
   const [teacherAssignments, setTeacherAssignments] = useState<TeacherAssignmentRow[]>([]);
 
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 250);
   const [studentForm, setStudentForm] = useState(emptyStudentForm());
   const [teacherForm, setTeacherForm] = useState(emptyTeacherForm());
   const [formError, setFormError] = useState<string | null>(null);
@@ -188,12 +190,12 @@ export function UserManagementPage() {
 
   const rows = useMemo(() => {
     const base = users.filter((u) => u.role === tab);
-    const q = search.trim().toLowerCase();
+    const q = debouncedSearch.trim().toLowerCase();
     const filtered = q
       ? base.filter((u) => u.full_name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || (u.usn ?? "").toLowerCase().includes(q) || (u.employee_id ?? "").toLowerCase().includes(q))
       : base;
     return filtered;
-  }, [users, tab, search]);
+  }, [users, tab, debouncedSearch]);
 
   function resetForm() {
     setStudentForm(emptyStudentForm());
