@@ -6,6 +6,7 @@ import {
   EVENT_TYPE_META, SCOPE_LABEL, countdownLabel, deriveStatus, targetLabel, whenLabel, type PlannerEvent,
 } from "../../lib/planner";
 import { PriorityBadge, StatusBadge, TypeBadge } from "./plannerUi";
+import { PosterImage } from "../../lib/posterUpload";
 
 interface Resources {
   unitName: string | null;
@@ -112,6 +113,16 @@ export function EventDetail({
         </dl>
 
         {ev.description && <p className="mt-4 whitespace-pre-wrap text-sm text-ink/90">{ev.description}</p>}
+
+        {ev.image_url && (
+          <div className="mt-4">
+            <PosterImage
+              src={ev.image_url}
+              alt={ev.title}
+              maxHeightClass="max-h-72"
+            />
+          </div>
+        )}
 
         {ev.subject_id && (
           <div className="mt-4 flex flex-wrap gap-2">

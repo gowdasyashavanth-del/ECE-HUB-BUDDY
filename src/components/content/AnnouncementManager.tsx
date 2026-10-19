@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { friendlyDbError } from "../../lib/supabaseErrors";
 import { useAuth } from "../../contexts/AuthContext";
+import { uploadPoster, deletePoster, validatePosterFile, PosterImage } from "../../lib/posterUpload";
 import { SCOPE_LABELS, resolveScopeLabels, scopeDisplay, type AnnouncementLike, type ScopeType } from "../../lib/announcementScope";
 import { PageHeader } from "../ui/PageHeader";
 import { LoadingState } from "../ui/LoadingState";
@@ -16,7 +17,7 @@ interface Sem { id: string; number: number; program_id: string; }
 interface Sect { id: string; name: string; semester_id: string; academic_year_id: string; }
 interface TeacherSection { section_id: string; label: string; }
 interface AnnouncementRow extends AnnouncementLike {
-  title: string; body: string; created_at: string;
+  title: string; body: string; created_at: string; image_url?: string | null;
 }
 
 // Authorization is entirely RLS's job (announcements_select/_insert/
@@ -55,9 +56,43 @@ export function AnnouncementManager() {
   const [fSectionId, setFSectionId] = useState("");
   const [fTitle, setFTitle] = useState("");
   const [fBody, setFBody] = useState("");
+  const [fPosterFile, setFPosterFile] = useState<File | null>(null);
+  const [fPosterPreview, setFPosterPreview] = useState<string | null>(null);
+  const [fPosterError, setFPosterError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [rowActionError, setRowActionError] = useState<string | null>(null);
+
+  function handlePosterChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const err = validatePosterFile(file);
+    if (err) {
+      setFPosterError(err);
+      return;
+    }
+    setFPosterError(null);
+    setFPosterFile(file);
+    setFPosterPreview(URL.createObjectURL(file));
+  }
+
+  function handleRemovePoster() {
+    setFPosterFile(null);
+    setFPosterPreview(null);
+    setFPosterError(null);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (fPosterPreview && fPosterPreview.startsWith("blob:")) {
+        try {
+          URL.revokeObjectURL(fPosterPreview);
+        } catch {
+          // ignore revocation errors
+        }
+      }
+    };
+  }, [fPosterPreview]);
 
   async function loadAll() {
     if (!supabase || !profile) return;
@@ -114,7 +149,7 @@ export function AnnouncementManager() {
     // to see.
     const { data: annRows, error: annErr } = await supabase
       .from("announcements")
-      .select("id, title, body, scope_type, scope_id, created_at")
+      .select("id, title, body, scope_type, scope_id, image_url, created_at")
       .order("created_at", { ascending: false });
     setLoading(false);
     if (annErr) { setLoadError(friendlyDbError(annErr, "Announcements")); return; }
@@ -151,6 +186,7 @@ export function AnnouncementManager() {
     setFScopeType(isAdmin ? "all" : "section");
     setFYearId(""); setFRegId(""); setFProgId(""); setFSemId(""); setFSectionId("");
     setFTitle(""); setFBody("");
+    setFPosterFile(null); setFPosterPreview(null); setFPosterError(null);
     setFormError(null);
     setFormOpen(true);
   }
@@ -163,7 +199,7 @@ export function AnnouncementManager() {
   }
 
   async function handleSubmit() {
-    if (!supabase) return;
+    if (!supabase || !profile) return;
     setFormError(null);
     if (!fTitle.trim()) return setFormError("Title is required.");
     if (!fBody.trim()) return setFormError("Body is required.");
@@ -195,19 +231,42 @@ export function AnnouncementManager() {
     }
 
     setSaving(true);
+    let imageUrl: string | null = null;
+    if (fPosterFile) {
+      const uploadRes = await uploadPoster({
+        file: fPosterFile,
+        userId: profile.id,
+        folder: "announcements",
+        sectionId: fScopeType === "section" ? fSectionId : undefined,
+      });
+      if (uploadRes.error) {
+        setSaving(false);
+        setFormError(uploadRes.error);
+        return;
+      }
+      imageUrl = uploadRes.url;
+    }
+
     const { data: newRow, error } = await supabase
       .from("announcements")
       .insert({
         title: fTitle.trim(),
         body: fBody.trim(),
+        image_url: imageUrl,
         scope_type: isAdmin ? fScopeType : "section",
         scope_id: scopeId,
         created_by: profile?.id,
       })
-      .select("id, title, body, scope_type, scope_id, created_at")
+      .select("id, title, body, scope_type, scope_id, image_url, created_at")
       .single();
     setSaving(false);
-    if (error) { setFormError(friendlyDbError(error, "Announcement")); return; }
+    if (error) {
+      if (imageUrl) {
+        await deletePoster(imageUrl);
+      }
+      setFormError(friendlyDbError(error, "Announcement"));
+      return;
+    }
     setFormOpen(false);
     if (newRow) {
       setRows((prev) => [newRow as AnnouncementRow, ...prev]);
@@ -230,6 +289,9 @@ export function AnnouncementManager() {
     setRowActionError(null);
     const { error } = await supabase.from("announcements").delete().eq("id", row.id);
     if (error) { setRowActionError(friendlyDbError(error, "Announcement")); return; }
+    if (row.image_url) {
+      await deletePoster(row.image_url);
+    }
     setRows((prev) => prev.filter((r) => r.id !== row.id));
   }
 
@@ -340,6 +402,32 @@ export function AnnouncementManager() {
                 <textarea value={fBody} onChange={(e) => setFBody(e.target.value)} rows={3} className={inputClass} />
               </div>
 
+              <div className="mt-3">
+                <label className="block text-xs font-medium text-inkmuted">Poster / Image (optional)</label>
+                {fPosterPreview ? (
+                  <div className="mt-1 space-y-2">
+                    <div className="relative max-w-xs overflow-hidden rounded-md border border-line bg-paper">
+                      <img src={fPosterPreview} alt="Poster preview" className="max-h-48 w-full object-contain" />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="cursor-pointer rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink hover:border-copper">
+                        Replace image
+                        <input type="file" accept="image/png,image/jpeg,image/webp" onChange={handlePosterChange} className="sr-only" />
+                      </label>
+                      <button type="button" onClick={handleRemovePoster} className="rounded-md border border-danger/40 px-3 py-1.5 text-xs font-medium text-danger hover:bg-danger/5">
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-1">
+                    <input type="file" accept="image/png,image/jpeg,image/webp" onChange={handlePosterChange} className={inputClass} />
+                    <p className="mt-1 text-xs text-inkmuted">PNG, JPEG, or WebP up to 5 MB.</p>
+                  </div>
+                )}
+                {fPosterError && <p className="mt-1 text-xs text-danger">{fPosterError}</p>}
+              </div>
+
               {formError && <p className="mt-3 rounded-md bg-danger/5 px-3 py-2 text-sm text-danger" role="alert">{formError}</p>}
 
               <div className="mt-4 flex gap-2">
@@ -360,9 +448,14 @@ export function AnnouncementManager() {
               {rows.map((row) => (
                 <div key={row.id} className="rounded-lg border border-line bg-panel p-4">
                   <div className="flex items-start justify-between gap-3">
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-ink">{row.title}</p>
-                      <p className="mt-1 text-sm text-inkmuted">{row.body}</p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-inkmuted">{row.body}</p>
+                      {row.image_url && (
+                        <div className="mt-3 max-w-sm">
+                          <PosterImage src={row.image_url} alt={row.title} maxHeightClass="max-h-60" />
+                        </div>
+                      )}
                     </div>
                     {isAdmin && (
                       <button onClick={() => handleDelete(row)} className={dangerBtn}>Delete</button>

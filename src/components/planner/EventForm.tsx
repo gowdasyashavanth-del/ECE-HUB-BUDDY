@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { friendlyDbError } from "../../lib/supabaseErrors";
+import { useAuth } from "../../contexts/AuthContext";
+import { uploadPoster, deletePoster, validatePosterFile, PosterImage } from "../../lib/posterUpload";
 import {
   EVENT_GROUP_LABEL, EVENT_TYPES_BY_GROUP, EVENT_TYPE_META, PRIORITY_LABEL, SCOPE_LABEL,
   localInputDate, localInputTime, localToIso,
@@ -52,12 +54,52 @@ export function EventForm({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { profile } = useAuth();
   const editing = initial !== null;
 
   const [eventType, setEventType] = useState<PlannerEventType>(initial?.event_type ?? "test");
   const [title, setTitle] = useState(initial?.title ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [priority, setPriority] = useState<PlannerPriority>(initial?.priority ?? "normal");
+
+  // ── poster / cover image ──
+  const [posterFile, setPosterFile] = useState<File | null>(null);
+  const [posterPreview, setPosterPreview] = useState<string | null>(initial?.image_url ?? null);
+  const [removePoster, setRemovePoster] = useState(false);
+  const [posterError, setPosterError] = useState<string | null>(null);
+
+  function handlePosterChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const err = validatePosterFile(file);
+    if (err) {
+      setPosterError(err);
+      return;
+    }
+    setPosterError(null);
+    setPosterFile(file);
+    setPosterPreview(URL.createObjectURL(file));
+    setRemovePoster(false);
+  }
+
+  function handleRemovePoster() {
+    setPosterFile(null);
+    setPosterPreview(null);
+    setRemovePoster(true);
+    setPosterError(null);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (posterPreview && posterPreview.startsWith("blob:")) {
+        try {
+          URL.revokeObjectURL(posterPreview);
+        } catch {
+          // ignore revocation errors
+        }
+      }
+    };
+  }, [posterPreview]);
 
   // ── time fields (local wall-clock; converted to UTC on save) ──
   const meta = EVENT_TYPE_META[eventType];
@@ -194,10 +236,38 @@ export function EventForm({
     const times = buildTimes();
     if (typeof times === "string") { setError(times); return; }
 
+    setSaving(true);
+
+    let finalImageUrl: string | null = initial?.image_url ?? null;
+    let newUploaded = false;
+
+    if (posterFile) {
+      if (!profile?.id) {
+        setSaving(false);
+        setError("You must be signed in to upload a poster.");
+        return;
+      }
+      const uploadRes = await uploadPoster({
+        file: posterFile,
+        userId: profile.id,
+        folder: "planner",
+      });
+      if (uploadRes.error) {
+        setSaving(false);
+        setError(uploadRes.error);
+        return;
+      }
+      finalImageUrl = uploadRes.url;
+      newUploaded = true;
+    } else if (removePoster) {
+      finalImageUrl = null;
+    }
+
     const hasSubject = !!target.subject_id;
     const payload = {
       title: title.trim(),
       description: description.trim() || null,
+      image_url: finalImageUrl,
       event_type: eventType,
       priority,
       ...target,
@@ -207,16 +277,36 @@ export function EventForm({
       ...times,
     };
 
-    setSaving(true);
     if (editing) {
       const { data, error: e } = await supabase.from("planner_events").update(payload).eq("id", initial!.id).select("id");
       setSaving(false);
-      if (e) { setError(friendlyDbError(e, "event")); return; }
-      if (!data || data.length === 0) { setError("You don't have permission to change this event."); return; }
+      if (e) {
+        if (newUploaded && finalImageUrl) {
+          await deletePoster(finalImageUrl);
+        }
+        setError(friendlyDbError(e, "event"));
+        return;
+      }
+      if (!data || data.length === 0) {
+        if (newUploaded && finalImageUrl) {
+          await deletePoster(finalImageUrl);
+        }
+        setError("You don't have permission to change this event.");
+        return;
+      }
+      if (initial?.image_url && (removePoster || newUploaded)) {
+        await deletePoster(initial.image_url);
+      }
     } else {
       const { error: e } = await supabase.from("planner_events").insert(payload);
       setSaving(false);
-      if (e) { setError(friendlyDbError(e, "event")); return; }
+      if (e) {
+        if (newUploaded && finalImageUrl) {
+          await deletePoster(finalImageUrl);
+        }
+        setError(friendlyDbError(e, "event"));
+        return;
+      }
     }
     onSaved();
   }
@@ -389,6 +479,50 @@ export function EventForm({
           <Field label="Description (optional)">
             <textarea className={inputCls} rows={3} maxLength={4000} value={description} onChange={(e) => setDescription(e.target.value)} />
           </Field>
+
+          <div>
+            <span className={labelCls}>Poster / Cover image (optional)</span>
+            {posterPreview ? (
+              <div className="mt-1 space-y-2">
+                <div className="relative max-w-xs">
+                  <PosterImage
+                    src={posterPreview}
+                    alt="Poster preview"
+                    maxHeightClass="max-h-48"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="cursor-pointer rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink hover:border-copper">
+                    Replace image
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={handlePosterChange}
+                      className="sr-only"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleRemovePoster}
+                    className="rounded-md border border-danger/40 px-3 py-1.5 text-xs font-medium text-danger hover:bg-danger/5"
+                  >
+                    Remove poster
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-1">
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={handlePosterChange}
+                  className={inputCls}
+                />
+                <p className="mt-1 text-xs text-inkmuted">PNG, JPEG, or WebP up to 5 MB.</p>
+              </div>
+            )}
+            {posterError && <p className="mt-1 text-xs text-danger">{posterError}</p>}
+          </div>
         </div>
 
         {error && <p className="mt-4 text-sm text-danger" role="alert">{error}</p>}

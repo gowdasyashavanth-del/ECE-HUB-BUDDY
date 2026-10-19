@@ -81,6 +81,7 @@ export interface PlannerEvent {
   id: string;
   title: string;
   description: string | null;
+  image_url: string | null;
   event_type: PlannerEventType;
   priority: PlannerPriority;
   target_scope: PlannerScope;
@@ -106,7 +107,7 @@ export interface PlannerEvent {
 // Only the columns the UI uses (no over-fetching), with the subject /
 // section names embedded so a list never needs extra round-trips.
 export const PLANNER_SELECT =
-  "id, title, description, event_type, priority, target_scope, academic_year_id, regulation_id, program_id, semester_id, section_id, subject_id, unit_id, topic_id, test_id, start_at, end_at, due_at, all_day, anchor_at, created_by, subjects(id, name, code), sections(id, name)";
+  "id, title, description, image_url, event_type, priority, target_scope, academic_year_id, regulation_id, program_id, semester_id, section_id, subject_id, unit_id, topic_id, test_id, start_at, end_at, due_at, all_day, anchor_at, created_by, subjects(id, name, code), sections(id, name)";
 
 const one = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? v[0] ?? null : v ?? null);
 

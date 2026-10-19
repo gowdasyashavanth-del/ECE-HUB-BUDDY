@@ -5,6 +5,7 @@ import { friendlyDbError } from "../../lib/supabaseErrors";
 import { fetchOverlapping } from "../../lib/plannerQueries";
 import { useAuth } from "../../contexts/AuthContext";
 import { useDebounce } from "../../hooks/useDebounce";
+import { deletePoster } from "../../lib/posterUpload";
 import type { UserRole } from "../../lib/types";
 import {
   EVENT_GROUP_LABEL, EVENT_TYPES_BY_GROUP, EVENT_TYPE_META, PLANNER_SELECT, PRIORITY_LABEL, SCOPE_LABEL,
@@ -221,6 +222,9 @@ export function PlannerPage({ role }: { role: UserRole }) {
     const { data, error: e } = await supabase.from("planner_events").delete().eq("id", ev.id).select("id");
     if (e) return friendlyDbError(e, "event");
     if (!data || data.length === 0) return "You don't have permission to delete this event.";
+    if (ev.image_url) {
+      await deletePoster(ev.image_url);
+    }
     setSelected(null);
     reload();
     return null;
