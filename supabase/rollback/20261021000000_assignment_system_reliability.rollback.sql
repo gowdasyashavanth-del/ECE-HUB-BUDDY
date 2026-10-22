@@ -15,6 +15,7 @@ DROP FUNCTION IF EXISTS public.trg_handle_user_role_change();
 DROP FUNCTION IF EXISTS public.reassign_student_to_section(uuid, uuid);
 DROP FUNCTION IF EXISTS public.end_class_teacher(uuid);
 DROP FUNCTION IF EXISTS public.unassign_lab_batch(uuid);
+DROP FUNCTION IF EXISTS public.unassign_lab_batch(uuid, uuid);
 
 -- ── 3. Drop newly introduced performance indexes ──
 DROP INDEX IF EXISTS public.idx_student_assignments_student_history;

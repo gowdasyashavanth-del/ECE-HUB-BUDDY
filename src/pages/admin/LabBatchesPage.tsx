@@ -167,7 +167,10 @@ export function LabBatchesPage() {
     if (!supabase) return;
     setSaving(true);
     setSectionError((p) => ({ ...p, [sectionId]: "" }));
-    const { error } = await supabase.rpc("unassign_lab_batch", { p_student_id: studentId });
+    const { error } = await supabase.rpc("unassign_lab_batch", {
+      p_student_id: studentId,
+      p_section_id: sectionId,
+    });
     setSaving(false);
     if (error) {
       setSectionError((p) => ({ ...p, [sectionId]: error.message }));

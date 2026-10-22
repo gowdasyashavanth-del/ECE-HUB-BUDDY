@@ -221,7 +221,13 @@ grant execute on function public.end_class_teacher(uuid) to authenticated;
 
 -- ── 4. Create unassign_lab_batch to safely unassign a student from a batch ──
 
-create or replace function public.unassign_lab_batch(p_student_id uuid)
+drop function if exists public.unassign_lab_batch(uuid);
+drop function if exists public.unassign_lab_batch(uuid, uuid);
+
+create or replace function public.unassign_lab_batch(
+  p_student_id uuid,
+  p_section_id uuid default null
+)
 returns void
 language plpgsql
 security definer
@@ -229,42 +235,61 @@ set search_path = public
 as $$
 declare
   v_caller uuid := auth.uid();
-  v_batch_section_id uuid;
+  v_target_section_id uuid := p_section_id;
+  v_active_count integer;
+  v_distinct_sections uuid[];
 begin
   if v_caller is null then
     raise exception 'Not authenticated.';
   end if;
 
-  -- Lock and find the active assignment's section
-  select section_id into v_batch_section_id
-  from public.student_lab_batch_assignments
-  where student_id = p_student_id and is_current = true
-  limit 1
-  for update;
+  -- If p_section_id is not provided, discover the active assignment's section
+  if v_target_section_id is null then
+    select count(*), array_agg(distinct section_id)
+      into v_active_count, v_distinct_sections
+    from public.student_lab_batch_assignments
+    where student_id = p_student_id and is_current = true;
 
-  -- If no active assignment exists, idempotent no-op
-  if v_batch_section_id is null then
-    return;
+    if v_active_count = 0 or v_distinct_sections is null then
+      return; -- Idempotent no-op if no active assignment exists
+    end if;
+
+    if cardinality(v_distinct_sections) > 1 then
+      raise exception 'Student has active lab batch assignments in multiple sections. Please specify p_section_id.';
+    end if;
+
+    v_target_section_id := v_distinct_sections[1];
   end if;
 
-  -- Strictly authorize against the assignment's own section:
+  -- Strictly authorize against the target section:
   -- Only Super Admin or the Class Teacher of that specific section may unassign.
   if not (
     public.is_admin()
-    or public.is_class_teacher_of_section(v_batch_section_id)
+    or public.is_class_teacher_of_section(v_target_section_id)
   ) then
     raise exception 'Forbidden: Only Super Admin or the class teacher of this section may unassign lab batches.';
   end if;
 
+  -- Lock the target active assignments in this section
+  perform 1
+  from public.student_lab_batch_assignments
+  where student_id = p_student_id
+    and section_id = v_target_section_id
+    and is_current = true
+  for update;
+
+  -- Update ONLY the active assignment(s) belonging strictly to the authorized target section
   update public.student_lab_batch_assignments
   set is_current = false, ended_at = now()
-  where student_id = p_student_id and is_current = true;
+  where student_id = p_student_id
+    and section_id = v_target_section_id
+    and is_current = true;
 end;
 $$;
 
-revoke all on function public.unassign_lab_batch(uuid) from public;
-revoke execute on function public.unassign_lab_batch(uuid) from anon;
-grant execute on function public.unassign_lab_batch(uuid) to authenticated;
+revoke all on function public.unassign_lab_batch(uuid, uuid) from public;
+revoke execute on function public.unassign_lab_batch(uuid, uuid) from anon;
+grant execute on function public.unassign_lab_batch(uuid, uuid) to authenticated;
 
 
 -- ── 5. Tighten authorization helpers with role validation ──

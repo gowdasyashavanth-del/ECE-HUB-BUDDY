@@ -88,7 +88,10 @@ export function TeacherLabBatchesPage() {
     if (!supabase) return;
     setSavingStudentId(studentId);
     setActionError(null);
-    const { error: err } = await supabase.rpc("unassign_lab_batch", { p_student_id: studentId });
+    const { error: err } = await supabase.rpc("unassign_lab_batch", {
+      p_student_id: studentId,
+      p_section_id: sectionId,
+    });
     setSavingStudentId(null);
     if (err) { setActionError(friendlyDbError(err, "Lab batch unassignment")); return; }
     await loadRoster(sectionId);
