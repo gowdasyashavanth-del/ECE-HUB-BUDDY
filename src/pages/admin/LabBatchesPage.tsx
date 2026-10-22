@@ -163,6 +163,20 @@ export function LabBatchesPage() {
     await loadAll();
   }
 
+  async function handleUnassign(studentId: string, sectionId: string) {
+    if (!supabase) return;
+    setSaving(true);
+    setSectionError((p) => ({ ...p, [sectionId]: "" }));
+    const { error } = await supabase.rpc("unassign_lab_batch", { p_student_id: studentId });
+    setSaving(false);
+    if (error) {
+      setSectionError((p) => ({ ...p, [sectionId]: error.message }));
+      return;
+    }
+    setPickedBatchByStudent((p) => ({ ...p, [studentId]: "" }));
+    await loadAll();
+  }
+
   return (
     <div>
       <PageHeader
@@ -278,6 +292,15 @@ export function LabBatchesPage() {
                               >
                                 {currentBatch ? "Change" : "Assign"}
                               </button>
+                              {currentBatch && (
+                                <button
+                                  onClick={() => handleUnassign(stu.id, s.id)}
+                                  disabled={saving}
+                                  className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-danger hover:border-danger disabled:opacity-50"
+                                >
+                                  Unassign
+                                </button>
+                              )}
                             </div>
                           </div>
                         );

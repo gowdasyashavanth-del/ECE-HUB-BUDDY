@@ -84,6 +84,16 @@ export function TeacherLabBatchesPage() {
     await loadRoster(sectionId);
   }
 
+  async function unassign(studentId: string) {
+    if (!supabase) return;
+    setSavingStudentId(studentId);
+    setActionError(null);
+    const { error: err } = await supabase.rpc("unassign_lab_batch", { p_student_id: studentId });
+    setSavingStudentId(null);
+    if (err) { setActionError(friendlyDbError(err, "Lab batch unassignment")); return; }
+    await loadRoster(sectionId);
+  }
+
   if (error) return <ErrorState message={error} />;
   if (sections === null) return <LoadingState label="Loading your class-teacher sections…" />;
 
@@ -120,11 +130,17 @@ export function TeacherLabBatchesPage() {
                     </div>
                     <select
                       value={current?.lab_batch_id ?? ""}
-                      onChange={(e) => e.target.value && assign(s.id, e.target.value)}
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          assign(s.id, e.target.value);
+                        } else if (current) {
+                          unassign(s.id);
+                        }
+                      }}
                       disabled={savingStudentId === s.id}
                       className="rounded-md border border-line bg-paper px-2 py-1.5 text-xs text-ink"
                     >
-                      <option value="">Not assigned</option>
+                      <option value="">{current ? "Unassign (No batch)" : "Not assigned"}</option>
                       {batches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                     </select>
                   </div>
