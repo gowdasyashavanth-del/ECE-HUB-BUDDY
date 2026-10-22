@@ -498,10 +498,15 @@ as $$
 begin
   if (TG_OP = 'UPDATE' and OLD.role is distinct from NEW.role) then
     -- Demoted teacher/admin to student: end active class teacher assignments
+    -- and remove active teacher_assignments so stale assignments cannot reactivate
+    -- if this account is ever re-promoted.
     if (OLD.role in ('teacher', 'super_admin') and NEW.role = 'student') then
       update public.class_teacher_assignments
       set is_current = false, ended_at = coalesce(ended_at, now())
       where teacher_id = NEW.id and is_current = true;
+
+      delete from public.teacher_assignments
+      where teacher_id = NEW.id;
     end if;
 
     -- Student promoted to teacher/admin: end active CR and lab batch assignments

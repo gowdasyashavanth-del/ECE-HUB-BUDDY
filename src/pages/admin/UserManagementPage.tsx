@@ -285,7 +285,7 @@ export function UserManagementPage() {
 
   async function handleDemote(user: UserRow) {
     if (!supabase) return;
-    if (!window.confirm(`Demote ${user.full_name || user.email} to student? They will lose teacher access immediately. Their teaching assignment history is kept, not deleted.`)) return;
+    if (!window.confirm(`Demote ${user.full_name || user.email} to student? They will lose teacher access immediately. Active class teacher assignments will be ended and subject teaching assignments removed.`)) return;
     setRowNote(null);
     const { error } = await supabase.from("users").update({ role: "student" }).eq("id", user.id);
     if (error) {
