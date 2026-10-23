@@ -6,7 +6,12 @@
 -- Compatible with all web and GUI SQL editors (Supabase Studio SQL Editor,
 -- pgAdmin, DBeaver, TablePlus, Navicat, etc.).
 --
--- For CLI execution with psql, you may also use 'supabase/tests/assignment_reliability_test.sql'.
+-- 1. Full Test Suite (Enforces RPC authorization and trigger coverage):
+--    Run the script as-is. If auth claims cannot be simulated in this SQL Editor
+--    session, it will abort with an explanatory error.
+--
+-- 2. Partial Opt-In (Allows trigger cascade tests if auth claims cannot be simulated):
+--    Execute 'SET test.allow_partial = on;' prior to running this script.
 --
 -- NOTE:
 -- This script runs inside a single transaction ending with ROLLBACK.
@@ -39,7 +44,9 @@ DECLARE
   v_active_sa_count integer;
   v_total_sa_count integer;
   v_timetable_count integer;
+  v_sec_check uuid;
 
+  v_allow_partial boolean := coalesce(current_setting('test.allow_partial', true) in ('true', '1', 'on'), false);
   v_auth_works boolean := false;
   v_threw_expected_error boolean := false;
   v_reassigned public.student_assignments;
@@ -118,7 +125,7 @@ BEGIN
 
   RAISE NOTICE '=== TEST 2: REASSIGNMENT RPC & SECTION TRANSFER CASCADING ===';
 
-  -- Evaluate if authenticated role claims can be established in this test harness
+  -- Safely evaluate whether authenticated session claims can be established
   BEGIN
     PERFORM set_config('role', 'authenticated', true);
     PERFORM set_config('request.jwt.claim.sub', v_admin_id::text, true);
@@ -129,6 +136,17 @@ BEGIN
   EXCEPTION WHEN OTHERS THEN
     v_auth_works := false;
   END;
+
+  -- Ensure failure to establish claims does not unintentionally leave the role as 'authenticated'
+  IF NOT v_auth_works THEN
+    BEGIN
+      EXECUTE 'RESET ROLE';
+    EXCEPTION WHEN OTHERS THEN
+      NULL;
+    END;
+    PERFORM set_config('request.jwt.claim.sub', '', true);
+    PERFORM set_config('request.jwt.claims', '', true);
+  END IF;
 
   IF v_auth_works THEN
     RAISE NOTICE 'Authenticated claims established: testing public.reassign_student_to_section RPC...';
@@ -169,10 +187,32 @@ BEGIN
       RAISE EXCEPTION 'RPC Security Breach: reassign_student_to_section allowed unauthenticated call.';
     END IF;
 
-    -- 2c. Authorized Super Admin Reassignment
+    -- 2c. Atomic Failure Path Test: Invalid destination section must fail without modifying existing assignment
     PERFORM set_config('request.jwt.claim.sub', v_admin_id::text, true);
     PERFORM set_config('request.jwt.claims', json_build_object('sub', v_admin_id::text, 'role', 'authenticated')::text, true);
 
+    v_threw_expected_error := false;
+    BEGIN
+      PERFORM public.reassign_student_to_section(v_student_id, gen_random_uuid());
+    EXCEPTION WHEN OTHERS THEN
+      IF sqlerrm LIKE '%Target section not found%' THEN
+        v_threw_expected_error := true;
+      ELSE
+        RAISE EXCEPTION 'Unexpected error on invalid section reassignment: %', sqlerrm;
+      END IF;
+    END;
+    IF NOT v_threw_expected_error THEN
+      RAISE EXCEPTION 'RPC Failure: reassign_student_to_section did not reject nonexistent destination section.';
+    END IF;
+
+    -- Assert state remained completely untouched after failed call
+    SELECT count(*), max(section_id) INTO v_active_sa_count, v_sec_check
+    FROM public.student_assignments WHERE student_id = v_student_id AND is_current = true;
+    IF v_active_sa_count <> 1 OR v_sec_check <> v_sec_a_id THEN
+      RAISE EXCEPTION 'Atomic failure test failed: student active assignment was corrupted by invalid reassignment call.';
+    END IF;
+
+    -- 2d. Authorized Super Admin Reassignment
     v_reassigned := public.reassign_student_to_section(v_student_id, v_sec_b_id);
 
     IF v_reassigned.section_id <> v_sec_b_id THEN
@@ -186,7 +226,7 @@ BEGIN
       RAISE EXCEPTION 'reassign_student_to_section did not mark new assignment as current.';
     END IF;
 
-    -- 2d. Same-Section Reassignment Guard
+    -- 2e. Same-Section Reassignment Guard & Atomicity Check
     v_threw_expected_error := false;
     BEGIN
       PERFORM public.reassign_student_to_section(v_student_id, v_sec_b_id);
@@ -201,10 +241,20 @@ BEGIN
       RAISE EXCEPTION 'reassign_student_to_section allowed redundant reassignment to same section.';
     END IF;
 
+    SELECT count(*), max(section_id) INTO v_active_sa_count, v_sec_check
+    FROM public.student_assignments WHERE student_id = v_student_id AND is_current = true;
+    IF v_active_sa_count <> 1 OR v_sec_check <> v_sec_b_id THEN
+      RAISE EXCEPTION 'Atomic failure test failed: redundant reassignment attempt altered active assignment.';
+    END IF;
+
   ELSE
     RAISE NOTICE 'SKIPPED: reassign_student_to_section RPC tests NOT TESTED because authenticated claims could not be established in this test harness.';
 
-    -- Fallback for test environments without Supabase auth claims: verify database trigger behavior directly
+    IF NOT v_allow_partial THEN
+      RAISE EXCEPTION 'TEST RUN INCOMPLETE: RPC authorization tests were SKIPPED because auth session claims (auth.uid() / public.is_admin()) could not be established in this SQL Editor session. To run only trigger-cascade tests without RPC authorization, execute "SET test.allow_partial = on;" prior to running this script.';
+    END IF;
+
+    -- Fallback for opted-in partial testing: verify database trigger behavior directly
     UPDATE public.student_assignments
     SET is_current = false
     WHERE student_id = v_student_id AND is_current = true;
@@ -233,6 +283,7 @@ BEGIN
   RAISE NOTICE '=== TEST 3: TEACHER DEMOTION, ASSIGNMENT CLEANUP & TIMETABLE PRESERVATION ===';
   -- If auth simulation is active, ensure admin session context so protect_sensitive_user_columns allows role change
   IF v_auth_works THEN
+    PERFORM set_config('role', 'authenticated', true);
     PERFORM set_config('request.jwt.claim.sub', v_admin_id::text, true);
     PERFORM set_config('request.jwt.claims', json_build_object('sub', v_admin_id::text, 'role', 'authenticated')::text, true);
   END IF;
@@ -268,7 +319,38 @@ BEGIN
     RAISE EXCEPTION 'Teacher unexpectedly regained stale assignments on re-promotion: count=%', v_active_ta_count;
   END IF;
 
-  RAISE NOTICE '=== ALL REGRESSION TESTS COMPLETED SUCCESSFULLY ===';
+  -- Reset role and claims cleanly before completing block
+  BEGIN
+    EXECUTE 'RESET ROLE';
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END;
+  PERFORM set_config('request.jwt.claim.sub', '', true);
+  PERFORM set_config('request.jwt.claims', '', true);
+
+  -- Print honest summary
+  RAISE NOTICE '=======================================================';
+  IF v_auth_works THEN
+    RAISE NOTICE 'FULL TEST SUITE PASSED (100%% COVERAGE):';
+    RAISE NOTICE '  [PASS] Test 1: Fixture setup & isolation';
+    RAISE NOTICE '  [PASS] Test 2a: reassign_student_to_section unauthorized caller rejected';
+    RAISE NOTICE '  [PASS] Test 2b: reassign_student_to_section unauthenticated caller rejected';
+    RAISE NOTICE '  [PASS] Test 2c: reassign_student_to_section atomic failure on invalid section';
+    RAISE NOTICE '  [PASS] Test 2d: reassign_student_to_section authorized transfer & CR/lab cleanup';
+    RAISE NOTICE '  [PASS] Test 2e: reassign_student_to_section redundant assignment rejected';
+    RAISE NOTICE '  [PASS] Test 3: Teacher demotion, assignment deletion & timetable preservation';
+    RAISE NOTICE '  [PASS] Test 4: Teacher re-promotion clean state';
+    RAISE NOTICE 'ALL 4 TEST SUITES COMPLETED SUCCESSFULLY';
+  ELSE
+    RAISE NOTICE 'PARTIAL TEST SUITE PASSED (OPTED-IN VIA test.allow_partial):';
+    RAISE NOTICE '  [PASS] Test 1: Fixture setup & isolation';
+    RAISE NOTICE '  [SKIPPED] Test 2: reassign_student_to_section RPC tests (auth unavailable)';
+    RAISE NOTICE '  [PASS] Test 2-fallback: Trigger cascading & history preservation';
+    RAISE NOTICE '  [PASS] Test 3: Teacher demotion & timetable preservation';
+    RAISE NOTICE '  [PASS] Test 4: Teacher re-promotion clean state';
+    RAISE NOTICE 'WARNING: RPC authorization tests were NOT RUN in this execution.';
+  END IF;
+  RAISE NOTICE '=======================================================';
 END;
 $$;
 
