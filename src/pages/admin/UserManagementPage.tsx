@@ -285,7 +285,7 @@ export function UserManagementPage() {
 
   async function handleDemote(user: UserRow) {
     if (!supabase) return;
-    if (!window.confirm(`Demote ${user.full_name || user.email} to student? They will lose teacher access immediately. Their teaching assignment history is kept, not deleted.`)) return;
+    if (!window.confirm(`Demote ${user.full_name || user.email} to student? They will lose teacher access immediately. Active class teacher assignments will be ended and subject teaching assignments removed.`)) return;
     setRowNote(null);
     const { error } = await supabase.from("users").update({ role: "student" }).eq("id", user.id);
     if (error) {
@@ -352,26 +352,14 @@ export function UserManagementPage() {
     // the one-current-assignment-per-student unique index is never violated.
     const current = studentAssignments.find((a) => a.student_id === u.id && a.is_current);
     if (!current || current.section_id !== editForm.sectionId) {
-      if (current) {
-        const { error } = await supabase.from("student_assignments").update({ is_current: false }).eq("student_id", u.id).eq("is_current", true);
-        if (error) {
-          setEditSubmitting(false);
-          setEditError(friendlyDbError(error, "Assignment"));
-          return;
-        }
-      }
-      const { error } = await supabase.from("student_assignments").insert({
-        student_id: u.id,
-        academic_year_id: editForm.yearId,
-        regulation_id: editForm.regId,
-        program_id: editForm.progId,
-        semester_id: editForm.semId,
-        section_id: editForm.sectionId,
-        is_current: true,
+      // Use transactional reassign RPC for atomic transfer
+      const { error: asgErr } = await supabase.rpc("reassign_student_to_section", {
+        p_student_id: u.id,
+        p_section_id: editForm.sectionId,
       });
-      if (error) {
+      if (asgErr) {
         setEditSubmitting(false);
-        setEditError(friendlyDbError(error, "Assignment"));
+        setEditError(friendlyDbError(asgErr, "Assignment"));
         return;
       }
     }

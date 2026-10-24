@@ -90,7 +90,7 @@ export function TeachersPage() {
 
   async function handleDemote(teacher: UserRow) {
     if (!supabase) return;
-    if (!window.confirm(`Remove teacher access for ${teacher.full_name || teacher.email}? Their existing assignments will remain but they'll no longer be able to use them (their role becomes 'student').`)) return;
+    if (!window.confirm(`Remove teacher access for ${teacher.full_name || teacher.email}? Their role becomes 'student'. Active class teacher assignments will be ended immediately, subject teaching assignments removed, and teaching privileges revoked.`)) return;
     setActionError(null);
     const { error: err } = await supabase.from("users").update({ role: "student" }).eq("id", teacher.id);
     if (err) {

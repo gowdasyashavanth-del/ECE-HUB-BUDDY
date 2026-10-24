@@ -145,6 +145,13 @@ export function TeacherAssignmentsPage() {
       setReassignRowId(null);
       return;
     }
+    const duplicate = assignments.find(
+      (asg: Assignment) => asg.id !== a.id && asg.teacher_id === reassignTeacherId && asg.section_id === a.section_id && asg.subject_id === a.subject_id
+    );
+    if (duplicate) {
+      setReassignError("This teacher is already assigned to this subject in this section.");
+      return;
+    }
     setReassignSaving(true);
     setReassignError(null);
     // A plain UPDATE, not a delete+insert — teacher_assignments has no
@@ -154,7 +161,11 @@ export function TeacherAssignmentsPage() {
     const { error } = await supabase.from("teacher_assignments").update({ teacher_id: reassignTeacherId }).eq("id", a.id);
     setReassignSaving(false);
     if (error) {
-      setReassignError(friendlyDbError(error, "Assignment"));
+      if ((error as { code?: string }).code === "23505") {
+        setReassignError("This teacher is already assigned to this subject in this section.");
+      } else {
+        setReassignError(friendlyDbError(error, "Assignment"));
+      }
       return;
     }
     setReassignRowId(null);
@@ -179,6 +190,14 @@ export function TeacherAssignmentsPage() {
     if (!sectionId) return setFormError("Select a section.");
     if (!subjectId) return setFormError("Select a subject.");
 
+    const duplicate = assignments.find(
+      (a: Assignment) => a.teacher_id === teacherId && a.section_id === sectionId && a.subject_id === subjectId
+    );
+    if (duplicate) {
+      setFormError("This teacher is already assigned to this subject in this section.");
+      return;
+    }
+
     setSaving(true);
     const { error } = await supabase.from("teacher_assignments").insert({
       teacher_id: teacherId,
@@ -187,7 +206,11 @@ export function TeacherAssignmentsPage() {
     });
     setSaving(false);
     if (error) {
-      setFormError(friendlyDbError(error, "Assignment"));
+      if ((error as { code?: string }).code === "23505") {
+        setFormError("This teacher is already assigned to this subject in this section.");
+      } else {
+        setFormError(friendlyDbError(error, "Assignment"));
+      }
       return;
     }
     setSectionId("");

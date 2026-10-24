@@ -347,7 +347,8 @@ export function AdminTimetablePage() {
       // Verify teacher assignments match production database constraints
       if (form.batch1_teacher_id) {
         const isAssigned = eligibleTeachersBatch1.some((t) => t.id === form.batch1_teacher_id);
-        if (!isAssigned) {
+        const isExistingUnchanged = form.id && allEntries.find((e) => e.id === form.id)?.teacher_id === form.batch1_teacher_id;
+        if (!isAssigned && !isExistingUnchanged) {
           setFormError("The selected teacher for Batch 1 is not assigned to this subject in this section.");
           return;
         }
@@ -500,7 +501,8 @@ export function AdminTimetablePage() {
     }
     if (form.teacher_id && form.subject_id) {
       const isAssigned = eligibleTeachers.some((t) => t.id === form.teacher_id);
-      if (!isAssigned) {
+      const isExistingUnchanged = form.id && allEntries.find((e) => e.id === form.id)?.teacher_id === form.teacher_id;
+      if (!isAssigned && !isExistingUnchanged) {
         setFormError("This teacher is not assigned to this subject in this section.");
         return;
       }
@@ -591,8 +593,13 @@ export function AdminTimetablePage() {
           {batch ? <span className="text-[10px] text-copper-dark font-normal"> · {batch.name}</span> : null}
         </div>
         {teacher && (
-          <div className="text-[11px] font-medium text-inkmuted mt-1 truncate max-w-full" title={teacher.full_name || teacher.email}>
-            {teacher.full_name || teacher.email}
+          <div className="text-[11px] font-medium text-inkmuted mt-1 truncate max-w-full flex items-center justify-center gap-1" title={teacher.full_name || teacher.email}>
+            <span className="truncate">{teacher.full_name || teacher.email}</span>
+            {e.teacher_id && e.subject_id && !teacherAssignments.some((ta) => ta.teacher_id === e.teacher_id && ta.section_id === e.section_id && ta.subject_id === e.subject_id) && (
+              <span className="rounded bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 px-1 py-0.5 text-[9px] font-medium shrink-0" title="Teacher not active in Teacher Assignments for this subject">
+                Unassigned
+              </span>
+            )}
           </div>
         )}
         {e.room && (
@@ -828,6 +835,7 @@ export function AdminTimetablePage() {
                 subjects={subjects}
                 teachers={teachers}
                 batches={batches}
+                teacherAssignments={teacherAssignments}
                 onAdd={openAdd}
                 onAddBatch={openAddBatch}
                 onEdit={openEdit}
@@ -1110,15 +1118,24 @@ export function AdminTimetablePage() {
                       disabled={!form.subject_id}
                     >
                       <option value="">{form.subject_id ? "Select teacher…" : "Select a subject first"}</option>
+                      {form.teacher_id && !eligibleTeachers.some((t) => t.id === form.teacher_id) && (
+                        <option value={form.teacher_id}>
+                          {teachers.find((t) => t.id === form.teacher_id)?.full_name || teachers.find((t) => t.id === form.teacher_id)?.email || "Assigned Teacher"} (Unassigned)
+                        </option>
+                      )}
                       {eligibleTeachers.map((t) => (
                         <option key={t.id} value={t.id}>{t.full_name || t.email}</option>
                       ))}
                     </select>
-                    {form.subject_id && eligibleTeachers.length === 0 && (
+                    {form.teacher_id && !eligibleTeachers.some((t) => t.id === form.teacher_id) ? (
+                      <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                        Notice: The currently assigned teacher is not active for this subject/section in Teacher Assignments. You may keep them, pick an active teacher, or select None.
+                      </p>
+                    ) : form.subject_id && eligibleTeachers.length === 0 ? (
                       <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
                         No teacher is assigned to this {form.block_type === "lab" ? "lab " : ""}subject in this section yet. Configure the assignment in Teacher Assignments first.
                       </p>
-                    )}
+                    ) : null}
                   </>
                 )}
 
@@ -1253,6 +1270,7 @@ function MobileDayView({
   subjects,
   teachers,
   batches,
+  teacherAssignments,
   onAdd,
   onAddBatch,
   onEdit,
@@ -1262,6 +1280,7 @@ function MobileDayView({
   subjects: Subj[];
   teachers: Teacher[];
   batches: Batch[];
+  teacherAssignments: { teacher_id: string; section_id: string; subject_id: string }[];
   onAdd: (day: number, start?: string, end?: string) => void;
   onAddBatch: (day: number, start: string, end: string, existingInSlot: Entry[]) => void;
   onEdit: (e: Entry) => void;
@@ -1378,8 +1397,13 @@ function MobileDayView({
                     </div>
 
                     <div className="mt-1 flex items-center justify-between text-[11px] text-inkmuted">
-                      <div className="truncate pr-2">
-                        {teacher ? (teacher.full_name || teacher.email) : "—"}
+                      <div className="truncate pr-2 flex items-center gap-1">
+                        <span>{teacher ? (teacher.full_name || teacher.email) : "—"}</span>
+                        {e.teacher_id && e.subject_id && !teacherAssignments.some((ta) => ta.teacher_id === e.teacher_id && ta.section_id === e.section_id && ta.subject_id === e.subject_id) && (
+                          <span className="rounded bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 px-1 py-0.5 text-[9px] font-medium" title="Teacher is not assigned to this subject/section in Teacher Assignments">
+                            Unassigned
+                          </span>
+                        )}
                       </div>
                       {e.room && (
                         <div className="font-mono font-semibold text-copper-dark shrink-0">
