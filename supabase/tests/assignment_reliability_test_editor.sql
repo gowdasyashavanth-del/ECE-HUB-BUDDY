@@ -7,8 +7,7 @@
 -- pgAdmin, DBeaver, TablePlus, Navicat, etc.).
 --
 -- 1. Full Test Suite (Enforces RPC authorization and trigger coverage):
---    Run the script as-is. If auth claims cannot be simulated in this SQL Editor
---    session, it will abort with an explanatory error.
+--    Run the script as-is in Supabase Studio SQL Editor or your GUI editor.
 --
 -- 2. Partial Opt-In (Allows trigger cascade tests if auth claims cannot be simulated):
 --    Execute 'SET test.allow_partial = on;' prior to running this script.
@@ -137,21 +136,20 @@ BEGIN
     v_auth_works := false;
   END;
 
-  -- Ensure failure to establish claims does not unintentionally leave the role as 'authenticated'
-  IF NOT v_auth_works THEN
-    BEGIN
-      EXECUTE 'RESET ROLE';
-    EXCEPTION WHEN OTHERS THEN
-      NULL;
-    END;
-    PERFORM set_config('request.jwt.claim.sub', '', true);
-    PERFORM set_config('request.jwt.claims', '', true);
-  END IF;
+  -- Ensure role is always reset to test harness role immediately after capability detection
+  BEGIN
+    EXECUTE 'RESET ROLE';
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END;
+  PERFORM set_config('request.jwt.claim.sub', '', true);
+  PERFORM set_config('request.jwt.claims', '', true);
 
   IF v_auth_works THEN
     RAISE NOTICE 'Authenticated claims established: testing public.reassign_student_to_section RPC...';
 
     -- 2a. Unauthorized Caller Test (Teacher calling Super Admin RPC)
+    PERFORM set_config('role', 'authenticated', true);
     PERFORM set_config('request.jwt.claim.sub', v_teacher_id::text, true);
     PERFORM set_config('request.jwt.claims', json_build_object('sub', v_teacher_id::text, 'role', 'authenticated')::text, true);
 
@@ -165,11 +163,18 @@ BEGIN
         RAISE EXCEPTION 'Unexpected error on unauthorized reassignment: %', sqlerrm;
       END IF;
     END;
+
+    -- Reset role to test runner before assertions
+    EXECUTE 'RESET ROLE';
+    PERFORM set_config('request.jwt.claim.sub', '', true);
+    PERFORM set_config('request.jwt.claims', '', true);
+
     IF NOT v_threw_expected_error THEN
       RAISE EXCEPTION 'RPC Security Breach: reassign_student_to_section allowed unauthorized teacher call.';
     END IF;
 
     -- 2b. Unauthenticated Caller Test
+    PERFORM set_config('role', 'authenticated', true);
     PERFORM set_config('request.jwt.claim.sub', '', true);
     PERFORM set_config('request.jwt.claims', '{}', true);
 
@@ -183,11 +188,18 @@ BEGIN
         RAISE EXCEPTION 'Unexpected error on unauthenticated reassignment: %', sqlerrm;
       END IF;
     END;
+
+    -- Reset role to test runner before assertions
+    EXECUTE 'RESET ROLE';
+    PERFORM set_config('request.jwt.claim.sub', '', true);
+    PERFORM set_config('request.jwt.claims', '', true);
+
     IF NOT v_threw_expected_error THEN
       RAISE EXCEPTION 'RPC Security Breach: reassign_student_to_section allowed unauthenticated call.';
     END IF;
 
     -- 2c. Atomic Failure Path Test: Invalid destination section must fail without modifying existing assignment
+    PERFORM set_config('role', 'authenticated', true);
     PERFORM set_config('request.jwt.claim.sub', v_admin_id::text, true);
     PERFORM set_config('request.jwt.claims', json_build_object('sub', v_admin_id::text, 'role', 'authenticated')::text, true);
 
@@ -201,19 +213,41 @@ BEGIN
         RAISE EXCEPTION 'Unexpected error on invalid section reassignment: %', sqlerrm;
       END IF;
     END;
+
+    -- Reset role to test runner BEFORE direct table assertions
+    EXECUTE 'RESET ROLE';
+    PERFORM set_config('request.jwt.claim.sub', '', true);
+    PERFORM set_config('request.jwt.claims', '', true);
+
     IF NOT v_threw_expected_error THEN
       RAISE EXCEPTION 'RPC Failure: reassign_student_to_section did not reject nonexistent destination section.';
     END IF;
 
-    -- Assert state remained completely untouched after failed call
-    SELECT count(*), max(section_id) INTO v_active_sa_count, v_sec_check
-    FROM public.student_assignments WHERE student_id = v_student_id AND is_current = true;
+    -- Assert state remained completely untouched after failed call (running as test runner role)
+    SELECT count(*) INTO v_active_sa_count
+    FROM public.student_assignments
+    WHERE student_id = v_student_id AND is_current = true;
+
+    SELECT section_id INTO v_sec_check
+    FROM public.student_assignments
+    WHERE student_id = v_student_id AND is_current = true;
+
     IF v_active_sa_count <> 1 OR v_sec_check <> v_sec_a_id THEN
-      RAISE EXCEPTION 'Atomic failure test failed: student active assignment was corrupted by invalid reassignment call.';
+      RAISE EXCEPTION 'Atomic failure test failed: student active assignment was corrupted by invalid reassignment call (count=%, section=%)',
+        v_active_sa_count, v_sec_check;
     END IF;
 
     -- 2d. Authorized Super Admin Reassignment
+    PERFORM set_config('role', 'authenticated', true);
+    PERFORM set_config('request.jwt.claim.sub', v_admin_id::text, true);
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_admin_id::text, 'role', 'authenticated')::text, true);
+
     v_reassigned := public.reassign_student_to_section(v_student_id, v_sec_b_id);
+
+    -- Reset role to test runner BEFORE checking results
+    EXECUTE 'RESET ROLE';
+    PERFORM set_config('request.jwt.claim.sub', '', true);
+    PERFORM set_config('request.jwt.claims', '', true);
 
     IF v_reassigned.section_id <> v_sec_b_id THEN
       RAISE EXCEPTION 'reassign_student_to_section returned incorrect section_id: %', v_reassigned.section_id;
@@ -227,6 +261,10 @@ BEGIN
     END IF;
 
     -- 2e. Same-Section Reassignment Guard & Atomicity Check
+    PERFORM set_config('role', 'authenticated', true);
+    PERFORM set_config('request.jwt.claim.sub', v_admin_id::text, true);
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_admin_id::text, 'role', 'authenticated')::text, true);
+
     v_threw_expected_error := false;
     BEGIN
       PERFORM public.reassign_student_to_section(v_student_id, v_sec_b_id);
@@ -237,14 +275,27 @@ BEGIN
         RAISE EXCEPTION 'Unexpected error on redundant reassignment: %', sqlerrm;
       END IF;
     END;
+
+    -- Reset role to test runner BEFORE direct table assertions
+    EXECUTE 'RESET ROLE';
+    PERFORM set_config('request.jwt.claim.sub', '', true);
+    PERFORM set_config('request.jwt.claims', '', true);
+
     IF NOT v_threw_expected_error THEN
       RAISE EXCEPTION 'reassign_student_to_section allowed redundant reassignment to same section.';
     END IF;
 
-    SELECT count(*), max(section_id) INTO v_active_sa_count, v_sec_check
-    FROM public.student_assignments WHERE student_id = v_student_id AND is_current = true;
+    SELECT count(*) INTO v_active_sa_count
+    FROM public.student_assignments
+    WHERE student_id = v_student_id AND is_current = true;
+
+    SELECT section_id INTO v_sec_check
+    FROM public.student_assignments
+    WHERE student_id = v_student_id AND is_current = true;
+
     IF v_active_sa_count <> 1 OR v_sec_check <> v_sec_b_id THEN
-      RAISE EXCEPTION 'Atomic failure test failed: redundant reassignment attempt altered active assignment.';
+      RAISE EXCEPTION 'Atomic failure test failed: redundant reassignment attempt altered active assignment (count=%, section=%)',
+        v_active_sa_count, v_sec_check;
     END IF;
 
   ELSE
@@ -263,7 +314,7 @@ BEGIN
     VALUES (v_student_id, v_year_b_id, v_reg_id, v_prog_id, v_sem_id, v_sec_b_id, true);
   END IF;
 
-  -- Verify history preservation and cascading deactivations
+  -- Verify history preservation and cascading deactivations (running under test runner role)
   SELECT count(*) INTO v_active_sa_count FROM public.student_assignments WHERE student_id = v_student_id AND is_current = true;
   SELECT count(*) INTO v_total_sa_count FROM public.student_assignments WHERE student_id = v_student_id;
   IF v_active_sa_count <> 1 OR v_total_sa_count <> 2 THEN
@@ -281,15 +332,19 @@ BEGIN
   END IF;
 
   RAISE NOTICE '=== TEST 3: TEACHER DEMOTION, ASSIGNMENT CLEANUP & TIMETABLE PRESERVATION ===';
-  -- If auth simulation is active, ensure admin session context so protect_sensitive_user_columns allows role change
+  -- Set admin JWT claims so protect_sensitive_user_columns trigger permits role update
   IF v_auth_works THEN
-    PERFORM set_config('role', 'authenticated', true);
     PERFORM set_config('request.jwt.claim.sub', v_admin_id::text, true);
     PERFORM set_config('request.jwt.claims', json_build_object('sub', v_admin_id::text, 'role', 'authenticated')::text, true);
   END IF;
 
-  -- Demote teacher to student
+  -- Demote teacher to student (running under test runner role)
   UPDATE public.users SET role = 'student' WHERE id = v_teacher_id;
+
+  IF v_auth_works THEN
+    PERFORM set_config('request.jwt.claim.sub', '', true);
+    PERFORM set_config('request.jwt.claims', '', true);
+  END IF;
 
   -- Assert class teacher assignment ended
   SELECT count(*) INTO v_active_ct_count FROM public.class_teacher_assignments WHERE teacher_id = v_teacher_id AND is_current = true;
@@ -310,8 +365,18 @@ BEGIN
   END IF;
 
   RAISE NOTICE '=== TEST 4: TEACHER RE-PROMOTION STARTS CLEAN ===';
+  IF v_auth_works THEN
+    PERFORM set_config('request.jwt.claim.sub', v_admin_id::text, true);
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_admin_id::text, 'role', 'authenticated')::text, true);
+  END IF;
+
   -- Re-promote user back to teacher
   UPDATE public.users SET role = 'teacher' WHERE id = v_teacher_id;
+
+  IF v_auth_works THEN
+    PERFORM set_config('request.jwt.claim.sub', '', true);
+    PERFORM set_config('request.jwt.claims', '', true);
+  END IF;
 
   -- Assert teacher has NO stale assignments reactivated
   SELECT count(*) INTO v_active_ta_count FROM public.teacher_assignments WHERE teacher_id = v_teacher_id;
@@ -319,7 +384,7 @@ BEGIN
     RAISE EXCEPTION 'Teacher unexpectedly regained stale assignments on re-promotion: count=%', v_active_ta_count;
   END IF;
 
-  -- Reset role and claims cleanly before completing block
+  -- Clean up session configuration
   BEGIN
     EXECUTE 'RESET ROLE';
   EXCEPTION WHEN OTHERS THEN
@@ -328,7 +393,7 @@ BEGIN
   PERFORM set_config('request.jwt.claim.sub', '', true);
   PERFORM set_config('request.jwt.claims', '', true);
 
-  -- Print honest summary
+  -- Print summary
   RAISE NOTICE '=======================================================';
   IF v_auth_works THEN
     RAISE NOTICE 'FULL TEST SUITE PASSED (100%% COVERAGE):';
