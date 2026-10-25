@@ -135,10 +135,7 @@ export function CrDesignationsPage() {
     if (!supabase) return;
     if (!window.confirm(`End this student's ${row.designation} designation? This is preserved in history, not deleted.`)) return;
     setRowError(null);
-    const { error } = await supabase
-      .from("cr_designations")
-      .update({ is_current: false, ended_at: new Date().toISOString() })
-      .eq("id", row.id);
+    const { error } = await supabase.rpc("end_cr_designation", { p_id: row.id });
     if (error) {
       setRowError("Couldn't end this designation. " + error.message);
       return;

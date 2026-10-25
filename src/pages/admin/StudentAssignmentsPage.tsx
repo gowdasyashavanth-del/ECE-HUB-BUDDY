@@ -18,12 +18,9 @@ interface Assignment {
   program_id: string; semester_id: string; section_id: string; is_current: boolean; created_at: string;
 }
 
-// Reuses the EXISTING student_assignments table exactly as designed —
-// no new columns. Reassignment NEVER edits an existing row's academic
-// fields; it unsets is_current on the old row and inserts a new one,
-// which is what preserves assignment HISTORY (past rows are kept, not
-// overwritten or deleted) — the same mechanism already documented in
-// 04_assignments_enrollments.sql's comments.
+// Uses reassign_student_to_section RPC for atomic transfers and proper academic_year_id
+// derivation from destination sections. Student assignment history is loaded on demand
+// per selected student to keep performance scalable.
 export function StudentAssignmentsPage() {
   const [searchParams] = useSearchParams();
   const preselectedStudent = searchParams.get("student") ?? "";
@@ -38,6 +35,8 @@ export function StudentAssignmentsPage() {
   const [semesters, setSemesters] = useState<Sem[]>([]);
   const [sections, setSections] = useState<Sect[]>([]);
   const [allAssignments, setAllAssignments] = useState<Assignment[]>([]);
+  const [studentHistory, setStudentHistory] = useState<Assignment[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const [studentId, setStudentId] = useState(preselectedStudent);
   const [yearId, setYearId] = useState("");
@@ -60,7 +59,7 @@ export function StudentAssignmentsPage() {
       supabase.from("programs").select("id, name, regulation_id").order("name"),
       supabase.from("semesters").select("id, number, program_id").order("number"),
       supabase.from("sections").select("id, name, semester_id, academic_year_id").order("name"),
-      supabase.from("student_assignments").select("id, student_id, academic_year_id, regulation_id, program_id, semester_id, section_id, is_current, created_at"),
+      supabase.from("student_assignments").select("id, student_id, academic_year_id, regulation_id, program_id, semester_id, section_id, is_current, created_at").eq("is_current", true),
     ]);
     const firstErr = [st, y, r, p, s, sec, asg].find((res) => res.error);
     setLoading(false);
@@ -77,9 +76,30 @@ export function StudentAssignmentsPage() {
     setAllAssignments((asg.data ?? []) as Assignment[]);
   }
 
+  async function loadStudentHistory(sId: string) {
+    if (!sId || !supabase) {
+      setStudentHistory([]);
+      return;
+    }
+    setHistoryLoading(true);
+    const { data, error } = await supabase
+      .from("student_assignments")
+      .select("id, student_id, academic_year_id, regulation_id, program_id, semester_id, section_id, is_current, created_at")
+      .eq("student_id", sId)
+      .order("created_at", { ascending: false });
+    setHistoryLoading(false);
+    if (!error && data) {
+      setStudentHistory(data as Assignment[]);
+    }
+  }
+
   useEffect(() => {
     loadAll();
   }, []);
+
+  useEffect(() => {
+    loadStudentHistory(studentId);
+  }, [studentId]);
 
   const filteredRegs = useMemo(() => regs.filter((r) => r.academic_year_id === yearId), [regs, yearId]);
   const filteredPrograms = useMemo(() => programs.filter((p) => p.regulation_id === regId), [programs, regId]);
@@ -93,10 +113,10 @@ export function StudentAssignmentsPage() {
   );
 
   const studentAssignments = useMemo(
-    () => allAssignments.filter((a) => a.student_id === studentId).sort((a, b) => (a.created_at < b.created_at ? 1 : -1)),
-    [allAssignments, studentId]
+    () => studentHistory,
+    [studentHistory]
   );
-  const currentAssignment = studentAssignments.find((a) => a.is_current);
+  const currentAssignment = studentAssignments.find((a) => a.is_current) ?? allAssignments.find((a) => a.student_id === studentId);
 
   function breadcrumbFor(a: Assignment): string {
     const year = years.find((y) => y.id === a.academic_year_id);
@@ -114,29 +134,11 @@ export function StudentAssignmentsPage() {
     if (!yearId || !regId || !progId || !semId || !sectionId) return setFormError("Select the full academic chain.");
 
     setSaving(true);
-
-    // Unset any existing current assignment first (two sequential
-    // calls — same pattern already used for academic_years' "Set
-    // current", for the same reason: the DB's partial unique index is
-    // what actually enforces "one current row," this just walks
-    // toward that state safely).
-    if (currentAssignment) {
-      const unset = await supabase.from("student_assignments").update({ is_current: false }).eq("id", currentAssignment.id);
-      if (unset.error) {
-        setSaving(false);
-        setFormError(friendlyDbError(unset.error, "Assignment"));
-        return;
-      }
-    }
-
-    const { error } = await supabase.from("student_assignments").insert({
-      student_id: studentId,
-      academic_year_id: yearId,
-      regulation_id: regId,
-      program_id: progId,
-      semester_id: semId,
-      section_id: sectionId,
-      is_current: true,
+    // Use transactional reassign RPC — atomically ends previous current assignment
+    // and derives academic year directly from destination section.
+    const { error } = await supabase.rpc("reassign_student_to_section", {
+      p_student_id: studentId,
+      p_section_id: sectionId,
     });
     setSaving(false);
     if (error) {
@@ -144,7 +146,7 @@ export function StudentAssignmentsPage() {
       return;
     }
     setYearId(""); setRegId(""); setProgId(""); setSemId(""); setSectionId("");
-    await loadAll();
+    await Promise.all([loadAll(), loadStudentHistory(studentId)]);
   }
 
   async function handleRemove() {
@@ -156,7 +158,7 @@ export function StudentAssignmentsPage() {
       setRowError(friendlyDbError(error, "Assignment"));
       return;
     }
-    await loadAll();
+    await Promise.all([loadAll(), loadStudentHistory(studentId)]);
   }
 
   const selectClass = "mt-1 w-full rounded-md border border-line bg-panel px-3 py-2 text-sm text-ink focus:border-copper focus:outline-none disabled:bg-paper disabled:text-inkmuted";
@@ -266,7 +268,11 @@ export function StudentAssignmentsPage() {
                 </button>
               </div>
 
-              {studentAssignments.length > 1 && (
+              {historyLoading ? (
+                <div className="py-2">
+                  <LoadingState label="Loading assignment history…" />
+                </div>
+              ) : studentAssignments.length > 1 ? (
                 <>
                   <p className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-inkmuted">
                     Assignment history
@@ -279,7 +285,7 @@ export function StudentAssignmentsPage() {
                     ))}
                   </div>
                 </>
-              )}
+              ) : null}
             </>
           )}
         </>

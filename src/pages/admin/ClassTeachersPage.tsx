@@ -112,6 +112,22 @@ export function ClassTeachersPage() {
     await loadAll();
   }
 
+  async function handleRemoveClassTeacher(sectionId: string) {
+    if (!supabase) return;
+    if (!window.confirm("Remove the class teacher from this section? The section will have no active class teacher. Assignment history is preserved.")) return;
+    setSaving(true);
+    setRowError(null);
+    const { error } = await supabase.rpc("end_class_teacher", {
+      p_section_id: sectionId,
+    });
+    setSaving(false);
+    if (error) {
+      setRowError(error.message);
+      return;
+    }
+    await loadAll();
+  }
+
   return (
     <div>
       <PageHeader
@@ -185,6 +201,15 @@ export function ClassTeachersPage() {
                       >
                         {assignment ? "Change" : "Assign"}
                       </button>
+                      {assignment && (
+                        <button
+                          onClick={() => handleRemoveClassTeacher(s.id)}
+                          disabled={saving}
+                          className="rounded-md border border-line px-3 py-1.5 text-sm font-medium text-danger hover:border-danger disabled:opacity-50"
+                        >
+                          Remove
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
