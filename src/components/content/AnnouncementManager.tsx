@@ -305,7 +305,7 @@ export function AnnouncementManager() {
       <PageHeader
         title="Announcements"
         subtitle={isAdmin ? "Post announcements at any scope, from platform-wide down to a single section." : "Post announcements for the sections you're assigned to."}
-        action={<button onClick={openCreate} className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-white hover:bg-copper-dark">+ New Announcement</button>}
+        action={<button onClick={openCreate} className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper hover:bg-copper-dark">+ New Announcement</button>}
       />
 
       {loadError && <ErrorState message={loadError} onRetry={loadAll} />}
@@ -431,7 +431,7 @@ export function AnnouncementManager() {
               {formError && <p className="mt-3 rounded-md bg-danger/5 px-3 py-2 text-sm text-danger" role="alert">{formError}</p>}
 
               <div className="mt-4 flex gap-2">
-                <button onClick={handleSubmit} disabled={saving} className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-white hover:bg-copper-dark disabled:opacity-60">
+                <button onClick={handleSubmit} disabled={saving} className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper hover:bg-copper-dark disabled:opacity-60">
                   {saving ? "Posting…" : "Post Announcement"}
                 </button>
                 <button onClick={() => setFormOpen(false)} className="rounded-md border border-line px-4 py-2 text-sm text-ink hover:border-copper hover:text-copper-dark">Cancel</button>

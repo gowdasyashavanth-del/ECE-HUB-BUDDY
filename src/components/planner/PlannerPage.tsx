@@ -257,7 +257,7 @@ export function PlannerPage({ role }: { role: UserRole }) {
           canCreate ? (
             <button
               onClick={() => { setEditing(null); setFormOpen(true); }}
-              className="shrink-0 rounded-md bg-copper px-4 py-2 text-sm font-medium text-white hover:bg-copper-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper"
+              className="shrink-0 rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper hover:bg-copper-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper"
             >
               + Create Event
             </button>
@@ -279,7 +279,7 @@ export function PlannerPage({ role }: { role: UserRole }) {
             role="tab"
             aria-selected={view === v.key}
             onClick={() => { setView(v.key); setSelectedDay(null); }}
-            className={`rounded-full px-3.5 py-1.5 text-sm font-medium ${view === v.key ? "bg-copper text-white" : "border border-line text-ink hover:border-copper"}`}
+            className={`rounded-full px-3.5 py-1.5 text-sm font-medium ${view === v.key ? "bg-copper text-oncopper" : "border border-line text-ink hover:border-copper"}`}
           >
             {v.label}
           </button>

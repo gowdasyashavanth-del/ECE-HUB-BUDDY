@@ -262,7 +262,7 @@ export function StudentAssignmentsPage() {
                 <button
                   onClick={handleAssign}
                   disabled={saving || !sectionId}
-                  className="mt-4 rounded-md bg-copper px-4 py-2 text-sm font-medium text-white hover:bg-copper-dark disabled:opacity-50"
+                  className="mt-4 rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper hover:bg-copper-dark disabled:opacity-50"
                 >
                   {saving ? "Saving…" : currentAssignment ? "Reassign" : "Assign"}
                 </button>

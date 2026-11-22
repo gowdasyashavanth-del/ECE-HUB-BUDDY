@@ -317,7 +317,7 @@ export function TeacherAssignmentsPage() {
                             <td className="py-2 pr-3">
                               {isReassigning ? (
                                 <div className="flex gap-2">
-                                  <button onClick={() => confirmReassign(a)} disabled={reassignSaving} className="rounded-md bg-copper px-2.5 py-1 text-xs font-medium text-white hover:bg-copper-dark disabled:opacity-50">
+                                  <button onClick={() => confirmReassign(a)} disabled={reassignSaving} className="rounded-md bg-copper px-2.5 py-1 text-xs font-medium text-oncopper hover:bg-copper-dark disabled:opacity-50">
                                     {reassignSaving ? "Saving…" : "Save"}
                                   </button>
                                   <button onClick={() => setReassignRowId(null)} className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink">
@@ -365,7 +365,7 @@ export function TeacherAssignmentsPage() {
                         <div className="mt-2 flex gap-2">
                           {isReassigning ? (
                             <>
-                              <button onClick={() => confirmReassign(a)} disabled={reassignSaving} className="rounded-md bg-copper px-2.5 py-1 text-xs font-medium text-white disabled:opacity-50">
+                              <button onClick={() => confirmReassign(a)} disabled={reassignSaving} className="rounded-md bg-copper px-2.5 py-1 text-xs font-medium text-oncopper disabled:opacity-50">
                                 {reassignSaving ? "Saving…" : "Save"}
                               </button>
                               <button onClick={() => setReassignRowId(null)} className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink">
@@ -462,7 +462,7 @@ export function TeacherAssignmentsPage() {
                 <button
                   onClick={handleAdd}
                   disabled={saving || !sectionId || !subjectId}
-                  className="mt-4 rounded-md bg-copper px-4 py-2 text-sm font-medium text-white hover:bg-copper-dark disabled:opacity-50"
+                  className="mt-4 rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper hover:bg-copper-dark disabled:opacity-50"
                 >
                   {saving ? "Adding…" : "+ Add Assignment"}
                 </button>

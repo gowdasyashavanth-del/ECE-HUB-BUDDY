@@ -196,7 +196,7 @@ export function StudyWorkspace({ topicId, focus }: { topicId: string; focus: Stu
   if (status === "error") return <ErrorState message={error ?? "Something went wrong."} onRetry={retry} />;
   if (status === "notfound" || !ctx) return <NotFound what="topic" />;
 
-  const btn = "inline-flex min-h-[44px] items-center justify-center rounded-md bg-copper px-4 py-2 text-sm font-medium text-white hover:bg-copper-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper";
+  const btn = "inline-flex min-h-[44px] items-center justify-center rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper hover:bg-copper-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper";
   const linkBtn = "inline-flex min-h-[44px] items-center rounded-md border border-line px-3 py-2 text-sm text-ink hover:border-copper focus-visible:outline focus-visible:outline-2 focus-visible:outline-copper";
 
   return (

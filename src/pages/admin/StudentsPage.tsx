@@ -152,11 +152,11 @@ export function StudentsPage() {
                         <input
                           value={usnDraft}
                           onChange={(e) => setUsnDraft(e.target.value)}
-                          className="w-28 rounded border border-line px-1.5 py-1 text-xs text-ink"
+                          className="w-28 rounded border border-line bg-field px-1.5 py-1 text-xs text-ink"
                           placeholder="e.g. 1BG23EC001"
                           autoFocus
                         />
-                        <button onClick={() => saveUsn(s.id)} className="rounded bg-copper px-1.5 py-1 text-[10px] font-medium text-white">Save</button>
+                        <button onClick={() => saveUsn(s.id)} className="rounded bg-copper px-1.5 py-1 text-[10px] font-medium text-oncopper">Save</button>
                         <button onClick={() => setEditingUsnId(null)} className="rounded border border-line px-1.5 py-1 text-[10px] text-ink">✕</button>
                       </div>
                     ) : (

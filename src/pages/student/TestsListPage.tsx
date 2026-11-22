@@ -75,7 +75,7 @@ export function TestsListPage() {
                 )}
                 <Link
                   to={`/student/tests/${t.id}`}
-                  className="mt-3 inline-block rounded-md bg-copper px-3 py-1.5 text-xs font-medium text-white hover:bg-copper-dark"
+                  className="mt-3 inline-block rounded-md bg-copper px-3 py-1.5 text-xs font-medium text-oncopper hover:bg-copper-dark"
                 >
                   {best ? "Retake Test" : "Start Test"}
                 </Link>

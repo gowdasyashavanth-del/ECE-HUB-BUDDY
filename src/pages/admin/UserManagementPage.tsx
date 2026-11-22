@@ -387,7 +387,7 @@ export function UserManagementPage() {
               setFormError(null);
               setSuccessNote(null);
             }}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium ${tab === t ? "bg-copper text-white" : "border border-line text-ink hover:border-copper"}`}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium ${tab === t ? "bg-copper text-oncopper" : "border border-line text-ink hover:border-copper"}`}
           >
             {t === "student" ? "Students" : "Teachers"}
           </button>
@@ -398,7 +398,7 @@ export function UserManagementPage() {
             setFormError(null);
             setSuccessNote(null);
           }}
-          className="ml-auto rounded-md bg-copper px-3 py-1.5 text-sm font-medium text-white hover:bg-copper-dark"
+          className="ml-auto rounded-md bg-copper px-3 py-1.5 text-sm font-medium text-oncopper hover:bg-copper-dark"
         >
           {showForm ? "Cancel" : tab === "student" ? "+ Add Student" : "+ Add Teacher"}
         </button>
@@ -551,7 +551,7 @@ export function UserManagementPage() {
           <button
             onClick={handleCreate}
             disabled={submitting}
-            className="mt-4 rounded-md bg-copper px-4 py-2 text-sm font-medium text-white hover:bg-copper-dark disabled:opacity-60"
+            className="mt-4 rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper hover:bg-copper-dark disabled:opacity-60"
           >
             {submitting ? "Creating…" : tab === "student" ? "Create Student" : "Create Teacher"}
           </button>
@@ -656,7 +656,7 @@ export function UserManagementPage() {
                       <button
                         onClick={() => handleSaveEditStudent(u)}
                         disabled={editSubmitting}
-                        className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-white hover:bg-copper-dark disabled:opacity-60"
+                        className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper hover:bg-copper-dark disabled:opacity-60"
                       >
                         {editSubmitting ? "Saving…" : "Save changes"}
                       </button>

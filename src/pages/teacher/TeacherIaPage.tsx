@@ -295,13 +295,13 @@ export function TeacherIaPage() {
             <div className="mb-4 flex gap-2">
               <button
                 onClick={() => { setMode("subject"); setSectionId(""); setSubjectId(""); }}
-                className={`rounded-full px-3 py-1.5 text-sm font-medium ${mode === "subject" ? "bg-copper text-white" : "border border-line text-ink"}`}
+                className={`rounded-full px-3 py-1.5 text-sm font-medium ${mode === "subject" ? "bg-copper text-oncopper" : "border border-line text-ink"}`}
               >
                 My Subject IA
               </button>
               <button
                 onClick={() => { setMode("class"); setSectionId(""); setSubjectId(""); }}
-                className={`rounded-full px-3 py-1.5 text-sm font-medium ${mode === "class" ? "bg-copper text-white" : "border border-line text-ink"}`}
+                className={`rounded-full px-3 py-1.5 text-sm font-medium ${mode === "class" ? "bg-copper text-oncopper" : "border border-line text-ink"}`}
               >
                 My Class (as Class Teacher)
               </button>
@@ -326,7 +326,7 @@ export function TeacherIaPage() {
                 <button
                   key={n}
                   onClick={() => setIaNumber(n)}
-                  className={`rounded-md px-3 py-1.5 text-sm font-medium ${iaNumber === n ? "bg-copper text-white" : "border border-line text-ink"}`}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium ${iaNumber === n ? "bg-copper text-oncopper" : "border border-line text-ink"}`}
                 >
                   IA {n}
                 </button>
@@ -411,7 +411,8 @@ function SubjectRoster({
                 placeholder="—"
                 value={draft[s.id] ?? ""}
                 onChange={(e) => setValue(s.id, e.target.value)}
-                className={`w-20 rounded-md border px-2 py-1.5 text-sm text-ink ${fieldErrors[s.id] ? "border-danger" : "border-line"}`}
+                aria-invalid={fieldErrors[s.id] ? true : undefined}
+                className={`w-20 rounded-md border bg-field px-2 py-1.5 text-sm text-ink ${fieldErrors[s.id] ? "border-danger" : "border-line"}`}
               />
               <span className="text-xs text-inkmuted">/ {maxMarks}</span>
             </div>
@@ -424,7 +425,7 @@ function SubjectRoster({
       {saveResult && <p className="mt-3 rounded-md bg-trace-light px-3 py-2 text-sm text-trace-dark" role="status">{saveResult}</p>}
 
       <div className="sticky bottom-4 mt-4 flex justify-end">
-        <button onClick={onSave} disabled={saving} className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-white shadow-md hover:bg-copper-dark disabled:opacity-50">
+        <button onClick={onSave} disabled={saving} className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper shadow-md hover:bg-copper-dark disabled:opacity-50">
           {saving ? "Saving…" : "Save IA Marks"}
         </button>
       </div>

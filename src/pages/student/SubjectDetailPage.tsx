@@ -205,7 +205,7 @@ export function SubjectDetailPage() {
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`rounded-full px-3 py-1.5 text-sm font-medium capitalize ${tab === t ? "bg-copper text-white" : "border border-line text-ink"}`}
+            className={`rounded-full px-3 py-1.5 text-sm font-medium capitalize ${tab === t ? "bg-copper text-oncopper" : "border border-line text-ink"}`}
           >
             {t === "ia" ? "IA" : t === "content" ? "Units & Content" : t}
           </button>

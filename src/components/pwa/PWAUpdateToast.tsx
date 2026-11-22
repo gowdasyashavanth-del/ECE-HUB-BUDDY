@@ -19,7 +19,7 @@ export function PWAUpdateToast() {
           <p className="flex-1 text-xs text-ink">A new version of ECE Hub Buddy is ready.</p>
           <button
             onClick={applyUpdate}
-            className="rounded-md bg-copper px-2.5 py-1 text-xs font-medium text-white hover:bg-copper-dark"
+            className="rounded-md bg-copper px-2.5 py-1 text-xs font-medium text-oncopper hover:bg-copper-dark"
           >
             Reload
           </button>

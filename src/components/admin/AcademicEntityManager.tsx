@@ -198,7 +198,7 @@ export function AcademicEntityManager({ config }: { config: EntityConfig }) {
         action={
           <button
             onClick={openCreateForm}
-            className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-white hover:bg-copper-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper"
+            className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper hover:bg-copper-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper"
           >
             + Add {config.titleSingular}
           </button>
@@ -264,7 +264,7 @@ export function AcademicEntityManager({ config }: { config: EntityConfig }) {
               <button
                 type="submit"
                 disabled={saving}
-                className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-white hover:bg-copper-dark disabled:opacity-60"
+                className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper hover:bg-copper-dark disabled:opacity-60"
               >
                 {saving ? "Saving…" : editingId ? "Save changes" : "Create"}
               </button>

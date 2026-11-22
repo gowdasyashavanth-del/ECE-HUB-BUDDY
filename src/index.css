@@ -31,6 +31,12 @@
   --color-trace-dark: 11 109 96; /* #0B6D60 */
   --color-trace-light: 220 239 236; /* #DCEFEC */
   --color-danger: 179 64 42; /* #B3402A */
+  /* Form-control tokens. :root keeps the LIGHT values so the login /
+     portal pages (outside [data-theme]) are unaffected. */
+  --color-field: 255 255 255; /* #FFFFFF */
+  --color-field-border: 127 140 160; /* #7F8CA0 — 3.4:1 on white (WCAG 1.4.11) */
+  --color-field-placeholder: 97 112 134; /* #617086 — 5.0:1 on white */
+  --color-on-copper: 255 255 255; /* text on bg-copper; unchanged in Light (see note in index.css) */
 }
 
 /* DARK — deep charcoal/navy, restrained cool accents. Intentionally
@@ -50,6 +56,10 @@
   --color-trace-dark: 130 214 191; /* #82D6BF */
   --color-trace-light: 20 40 38; /* #142826 */
   --color-danger: 224 110 90; /* #E06E5A */
+  --color-field: 13 17 23; /* #0D1117 — one step deeper than panel */
+  --color-field-border: 91 104 125; /* #5B687D — 3.1:1 on panel, 3.4:1 on field */
+  --color-field-placeholder: 124 136 155; /* #7C889B — 4.8:1 on panel, 5.3:1 on field */
+  --color-on-copper: 13 17 23; /* #0D1117 on #E08D4A = 7.3:1 (white was 2.6:1) */
 }
 
 /* EYE CARE — warm charcoal/brown-gray/cream, low blue content, for
@@ -70,10 +80,115 @@
   --color-trace-dark: 190 204 150; /* #BECC96 */
   --color-trace-light: 40 40 26; /* #28281A */
   --color-danger: 214 110 90; /* #D66E5A */
+  --color-field: 30 26 20; /* #1E1A14 — one step deeper than panel */
+  --color-field-border: 122 108 87; /* #7A6C57 — 3.0:1 on panel, 3.4:1 on field */
+  --color-field-placeholder: 154 139 115; /* #9A8B73 — 4.6:1 on panel, 5.2:1 on field */
+  --color-on-copper: 30 26 20; /* #1E1A14 on #D69452 = 6.8:1 (white was 2.6:1) */
 }
 
 body {
   @apply bg-paper text-ink;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Native control rendering (color-scheme)
+   ─────────────────────────────────────────────────────────────────
+   Tells the browser to draw its own widgets (date/time picker icons,
+   number spinners, scrollbars, <select> popups, autofill) in the
+   matching light/dark style. Scoped to the AppShell [data-theme]
+   wrapper only — never :root — so the login / portal-selection pages
+   keep their fixed light rendering. */
+[data-theme="light"] {
+  color-scheme: light;
+}
+[data-theme="dark"],
+[data-theme="eyecare"] {
+  color-scheme: dark;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Form-control baseline (Tier 1 theme fix)
+   ─────────────────────────────────────────────────────────────────
+   Every selector is wrapped in :where(), which has ZERO specificity,
+   so any utility class a page sets deliberately (bg-panel, text-ink,
+   border-danger, focus:outline-none, placeholder:text-inkmuted …)
+   still wins. This layer only supplies what a control omits — it is
+   the safety net that stops an input with no background class from
+   falling back to the browser's white fill under light theme text.
+
+   Borders: pages set `border-line` on almost every field, and a
+   zero-specificity rule cannot change that. Instead each field
+   re-points the --color-line variable (only on itself) to the
+   field-border token, so `border-line` resolves to a ≥3:1 outline for
+   fields without changing any card, divider or other element. */
+@layer base {
+  :where([data-theme] input:not([type="checkbox"], [type="radio"], [type="button"], [type="submit"], [type="reset"], [type="image"], [type="range"], [type="color"], [type="file"], [type="hidden"]), [data-theme] select, [data-theme] textarea) {
+    background-color: rgb(var(--color-field));
+    color: rgb(var(--color-ink));
+    --color-line: var(--color-field-border);
+  }
+
+  /* Specificity note: Tailwind's reset sets `input::placeholder` at
+     (0,0,2). `:where()` + a bare element + ::placeholder is also
+     (0,0,2) and comes later, so it wins the tie, while any deliberate
+     `placeholder:text-*` utility (0,1,1) still overrides it. */
+  :where([data-theme]) input::placeholder,
+  :where([data-theme]) textarea::placeholder {
+    color: rgb(var(--color-field-placeholder));
+    opacity: 1;
+  }
+
+  /* Options render in the popup in some browsers (Firefox, Chrome on
+     Windows/Linux); give them the panel surface explicitly. */
+  :where([data-theme] select option, [data-theme] select optgroup) {
+    background-color: rgb(var(--color-panel));
+    color: rgb(var(--color-ink));
+  }
+
+  /* Focus: only supplies a ring for fields that define none. Fields
+     with focus:outline-none keep their existing focus:border-copper. */
+  :where([data-theme] input:not([type="checkbox"], [type="radio"], [type="button"], [type="submit"], [type="reset"], [type="image"], [type="hidden"]), [data-theme] select, [data-theme] textarea):focus-visible {
+    outline: 2px solid rgb(var(--color-copper));
+    outline-offset: 1px;
+  }
+
+  :where([data-theme] input:not([type="checkbox"], [type="radio"], [type="button"], [type="submit"], [type="reset"], [type="image"], [type="range"], [type="color"], [type="file"], [type="hidden"]), [data-theme] select, [data-theme] textarea):disabled {
+    background-color: rgb(var(--color-paper));
+    color: rgb(var(--color-inkmuted));
+    cursor: not-allowed;
+  }
+
+  /* Validation: any field marked aria-invalid shows the danger outline
+     (same variable re-point as above, so `border-line` turns red). */
+  :where([data-theme] input[aria-invalid="true"], [data-theme] select[aria-invalid="true"], [data-theme] textarea[aria-invalid="true"]) {
+    --color-line: var(--color-danger);
+  }
+
+  /* Autofill: browsers paint their own pale fill and keep the inherited
+     (light) text colour, which is unreadable in Dark/Eye Care. The
+     inset box-shadow + text-fill-color override is the supported way to
+     retheme it without disabling autofill. Separate rules because an
+     unknown pseudo-class would invalidate a combined selector list. */
+  :where([data-theme] input):-webkit-autofill,
+  :where([data-theme] textarea):-webkit-autofill,
+  :where([data-theme] select):-webkit-autofill {
+    -webkit-text-fill-color: rgb(var(--color-ink));
+    caret-color: rgb(var(--color-ink));
+    box-shadow: 0 0 0 1000px rgb(var(--color-field)) inset;
+    transition: background-color 9999s ease-out 0s;
+  }
+  :where([data-theme] input):autofill,
+  :where([data-theme] textarea):autofill,
+  :where([data-theme] select):autofill {
+    -webkit-text-fill-color: rgb(var(--color-ink));
+    caret-color: rgb(var(--color-ink));
+    box-shadow: 0 0 0 1000px rgb(var(--color-field)) inset;
+  }
+
+  /* Native checkbox / radio / range accent. */
+  :where([data-theme] input[type="checkbox"], [data-theme] input[type="radio"], [data-theme] input[type="range"]) {
+    accent-color: rgb(var(--color-copper));
+  }
 }
 
 /* Theme changes should feel like a soft cross-fade, not a hard cut. */

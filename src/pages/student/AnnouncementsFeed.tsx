@@ -153,7 +153,7 @@ export function AnnouncementsFeed() {
         subtitle="Relevant to your current academic context."
         action={
           crSectionId ? (
-            <button onClick={() => setComposing((c) => !c)} className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-white hover:bg-copper-dark">
+            <button onClick={() => setComposing((c) => !c)} className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper hover:bg-copper-dark">
               {composing ? "Cancel" : "+ Post to My Section"}
             </button>
           ) : undefined
@@ -198,7 +198,7 @@ export function AnnouncementsFeed() {
             {posterError && <p className="mt-1 text-xs text-danger">{posterError}</p>}
           </div>
           {formError && <p className="mt-3 rounded-md bg-danger/5 px-3 py-2 text-sm text-danger" role="alert">{formError}</p>}
-          <button onClick={handlePost} disabled={saving} className="mt-4 rounded-md bg-copper px-4 py-2 text-sm font-medium text-white hover:bg-copper-dark disabled:opacity-60">
+          <button onClick={handlePost} disabled={saving} className="mt-4 rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper hover:bg-copper-dark disabled:opacity-60">
             {saving ? "Posting…" : "Post Note"}
           </button>
         </div>

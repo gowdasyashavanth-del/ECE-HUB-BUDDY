@@ -48,7 +48,7 @@ export function PWAInstallCard() {
               <button
                 onClick={handleInstall}
                 disabled={installing}
-                className="rounded-md bg-copper px-3 py-1.5 text-xs font-medium text-white hover:bg-copper-dark disabled:opacity-60"
+                className="rounded-md bg-copper px-3 py-1.5 text-xs font-medium text-oncopper hover:bg-copper-dark disabled:opacity-60"
               >
                 {installing ? "Opening…" : "Install App"}
               </button>

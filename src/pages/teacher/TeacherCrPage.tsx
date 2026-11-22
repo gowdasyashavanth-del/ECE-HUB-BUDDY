@@ -147,7 +147,7 @@ export function TeacherCrPage() {
                       <button
                         onClick={() => assign(designation)}
                         disabled={!draftStudent[designation] || saving === designation}
-                        className="rounded-md bg-copper px-2.5 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                        className="rounded-md bg-copper px-2.5 py-1.5 text-xs font-medium text-oncopper disabled:opacity-50"
                       >
                         {saving === designation ? "Saving…" : "Save"}
                       </button>

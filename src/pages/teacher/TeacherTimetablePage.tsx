@@ -150,7 +150,7 @@ export function TeacherTimetablePage() {
                 onClick={() => setActiveSection(s.id)}
                 className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
                   activeSection === s.id
-                    ? "bg-copper text-white shadow-xs"
+                    ? "bg-copper text-oncopper shadow-xs"
                     : "border border-line text-ink bg-panel hover:border-copper"
                 }`}
               >
@@ -318,7 +318,7 @@ function MobileDayView({
               onClick={() => setDay(d)}
               className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap transition-all ${
                 isActive
-                  ? "bg-copper text-white shadow-xs"
+                  ? "bg-copper text-oncopper shadow-xs"
                   : "border border-line bg-panel text-ink hover:border-copper/70"
               }`}
             >

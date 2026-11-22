@@ -416,7 +416,7 @@ export function NotesManager() {
         subtitle={isAdmin ? "Manage PDF notes across every section and subject." : "Manage PDF notes for the sections/subjects you're authorized for."}
         action={
           sectionsForPicker.length > 0 ? (
-            <button onClick={openCreate} className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-white hover:bg-copper-dark">
+            <button onClick={openCreate} className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper hover:bg-copper-dark">
               + Add Note
             </button>
           ) : undefined
@@ -517,7 +517,7 @@ export function NotesManager() {
                             type="button"
                             onClick={handleCreateChapter}
                             disabled={chapterSaving || !newChapterName.trim()}
-                            className="rounded-md bg-copper px-2 py-1 text-xs font-medium text-white hover:bg-copper-dark disabled:opacity-60"
+                            className="rounded-md bg-copper px-2 py-1 text-xs font-medium text-oncopper hover:bg-copper-dark disabled:opacity-60"
                           >
                             {chapterSaving ? "…" : "Create"}
                           </button>
@@ -557,7 +557,7 @@ export function NotesManager() {
               {formError && <p className="mt-3 rounded-md bg-danger/5 px-3 py-2 text-sm text-danger" role="alert">{formError}</p>}
 
               <div className="mt-4 flex gap-2">
-                <button onClick={handleSubmit} disabled={saving} className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-white hover:bg-copper-dark disabled:opacity-60">
+                <button onClick={handleSubmit} disabled={saving} className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper hover:bg-copper-dark disabled:opacity-60">
                   {saving ? "Saving…" : editingId ? "Save changes" : "Upload"}
                 </button>
                 <button onClick={() => setFormOpen(false)} className="rounded-md border border-line px-4 py-2 text-sm text-ink hover:border-copper hover:text-copper-dark">

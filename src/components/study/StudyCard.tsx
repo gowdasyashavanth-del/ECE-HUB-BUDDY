@@ -13,7 +13,7 @@ export function StudyCard() {
       <div className="mb-3"><ContinueStudying fallback="Choose a topic to begin." /></div>
       <Link
         to={studyUrl()}
-        className="inline-block rounded-md bg-copper px-4 py-2 text-sm font-medium text-white hover:bg-copper-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper"
+        className="inline-block rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper hover:bg-copper-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper"
       >
         Start Studying
       </Link>

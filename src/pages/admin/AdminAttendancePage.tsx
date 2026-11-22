@@ -209,8 +209,8 @@ export function AdminAttendancePage() {
       <PageHeader title="Attendance" subtitle="All attendance across the institution." />
 
       <div className="mb-4 flex gap-2">
-        <button onClick={() => setTab("records")} className={`rounded-full px-3 py-1.5 text-sm font-medium ${tab === "records" ? "bg-copper text-white" : "border border-line text-ink"}`}>Records</button>
-        <button onClick={() => setTab("audit")} className={`rounded-full px-3 py-1.5 text-sm font-medium ${tab === "audit" ? "bg-copper text-white" : "border border-line text-ink"}`}>Correction Audit</button>
+        <button onClick={() => setTab("records")} className={`rounded-full px-3 py-1.5 text-sm font-medium ${tab === "records" ? "bg-copper text-oncopper" : "border border-line text-ink"}`}>Records</button>
+        <button onClick={() => setTab("audit")} className={`rounded-full px-3 py-1.5 text-sm font-medium ${tab === "audit" ? "bg-copper text-oncopper" : "border border-line text-ink"}`}>Correction Audit</button>
       </div>
 
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
@@ -281,7 +281,7 @@ export function AdminAttendancePage() {
                       <select value={editStatus} onChange={(e) => setEditStatus(e.target.value as Status)} className={selectCls}>
                         {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                       </select>
-                      <button onClick={() => confirmEdit(r)} className="rounded-md bg-copper px-2.5 py-1 text-xs font-medium text-white">Save</button>
+                      <button onClick={() => confirmEdit(r)} className="rounded-md bg-copper px-2.5 py-1 text-xs font-medium text-oncopper">Save</button>
                       <button onClick={() => setEditingId(null)} className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink">Cancel</button>
                     </div>
                   ) : (

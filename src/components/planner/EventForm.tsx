@@ -442,7 +442,7 @@ export function EventForm({
             <div className="flex gap-2" role="radiogroup" aria-label="Priority">
               {(Object.keys(PRIORITY_LABEL) as PlannerPriority[]).map((p) => (
                 <button key={p} type="button" role="radio" aria-checked={priority === p} onClick={() => setPriority(p)}
-                  className={`rounded-full px-3 py-1.5 text-sm font-medium ${priority === p ? "bg-copper text-white" : "border border-line text-ink"}`}>
+                  className={`rounded-full px-3 py-1.5 text-sm font-medium ${priority === p ? "bg-copper text-oncopper" : "border border-line text-ink"}`}>
                   {PRIORITY_LABEL[p]}
                 </button>
               ))}
@@ -529,7 +529,7 @@ export function EventForm({
 
         <div className="mt-5 flex justify-end gap-2">
           <button onClick={onClose} disabled={saving} className="rounded-md border border-line px-4 py-2 text-sm text-ink">Cancel</button>
-          <button onClick={save} disabled={saving} className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-white hover:bg-copper-dark disabled:opacity-60">
+          <button onClick={save} disabled={saving} className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper hover:bg-copper-dark disabled:opacity-60">
             {saving ? "Saving…" : editing ? "Save changes" : "Create event"}
           </button>
         </div>

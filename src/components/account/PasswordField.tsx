@@ -38,7 +38,7 @@ export function PasswordField({
           disabled={disabled}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? `${id}-error` : hint ? `${id}-hint` : undefined}
-          className="w-full rounded-md border border-line px-3 py-2 pr-16 text-sm text-ink focus:border-copper focus:outline-none disabled:opacity-60"
+          className="w-full rounded-md border border-line bg-field px-3 py-2 pr-16 text-sm text-ink focus:border-copper focus:outline-none disabled:opacity-60"
         />
         <button
           type="button"

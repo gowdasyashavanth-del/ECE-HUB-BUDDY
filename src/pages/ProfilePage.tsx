@@ -192,7 +192,7 @@ export function ProfilePage() {
             id="full_name"
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
-            className="mt-1 w-full rounded-md border border-line px-3 py-2 text-sm text-ink focus:border-copper focus:outline-none"
+            className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2 text-sm text-ink focus:border-copper focus:outline-none"
           />
         </div>
 
@@ -204,7 +204,7 @@ export function ProfilePage() {
             id="phone"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            className="mt-1 w-full rounded-md border border-line px-3 py-2 text-sm text-ink focus:border-copper focus:outline-none"
+            className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2 text-sm text-ink focus:border-copper focus:outline-none"
           />
         </div>
 
@@ -218,7 +218,7 @@ export function ProfilePage() {
               value={usn}
               onChange={(e) => setUsn(e.target.value)}
               placeholder="e.g. 1BG23EC001"
-              className="mt-1 w-full rounded-md border border-line px-3 py-2 text-sm uppercase text-ink focus:border-copper focus:outline-none"
+              className="mt-1 w-full rounded-md border border-line bg-field px-3 py-2 text-sm uppercase text-ink focus:border-copper focus:outline-none"
             />
             <p className="mt-1 text-xs text-inkmuted">Only you can set your own USN. It's visible to your Super Admin and your assigned teachers.</p>
           </div>
@@ -249,7 +249,7 @@ export function ProfilePage() {
         <button
           type="submit"
           disabled={saving}
-          className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-white hover:bg-copper-dark disabled:opacity-60"
+          className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper hover:bg-copper-dark disabled:opacity-60"
         >
           {saving ? "Saving…" : "Save changes"}
         </button>

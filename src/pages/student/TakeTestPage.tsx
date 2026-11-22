@@ -138,7 +138,7 @@ export function TakeTestPage() {
       <button
         onClick={handleSubmit}
         disabled={!allAnswered || submitting}
-        className="mt-5 rounded-md bg-copper px-5 py-2.5 text-sm font-medium text-white hover:bg-copper-dark disabled:opacity-50"
+        className="mt-5 rounded-md bg-copper px-5 py-2.5 text-sm font-medium text-oncopper hover:bg-copper-dark disabled:opacity-50"
       >
         {submitting ? "Submitting…" : "Submit Test"}
       </button>

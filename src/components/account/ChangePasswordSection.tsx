@@ -116,7 +116,7 @@ export function ChangePasswordSection() {
       <button
         type="submit"
         disabled={submitting}
-        className="w-full rounded-md bg-copper px-4 py-2 text-sm font-medium text-white hover:bg-copper-dark disabled:opacity-60 sm:w-auto"
+        className="w-full rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper hover:bg-copper-dark disabled:opacity-60 sm:w-auto"
       >
         {submitting ? "Changing…" : "Change password"}
       </button>

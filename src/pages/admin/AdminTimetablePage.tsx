@@ -701,7 +701,7 @@ export function AdminTimetablePage() {
               <div className="mb-3 flex justify-end">
                 <button
                   onClick={() => openAdd(1)}
-                  className="rounded-md bg-copper px-3 py-1.5 text-sm font-medium text-white hover:bg-copper-dark"
+                  className="rounded-md bg-copper px-3 py-1.5 text-sm font-medium text-oncopper hover:bg-copper-dark"
                 >
                   + Add entry
                 </button>
@@ -1248,7 +1248,7 @@ export function AdminTimetablePage() {
                 <button
                   onClick={handleSave}
                   disabled={saving}
-                  className="rounded-md bg-copper px-3 py-1.5 text-sm font-medium text-white hover:bg-copper-dark disabled:opacity-50"
+                  className="rounded-md bg-copper px-3 py-1.5 text-sm font-medium text-oncopper hover:bg-copper-dark disabled:opacity-50"
                 >
                   {saving ? "Saving…" : "Save"}
                 </button>
@@ -1299,7 +1299,7 @@ function MobileDayView({
               onClick={() => setActiveDay(d)}
               className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap transition-all ${
                 isActive
-                  ? "bg-copper text-white shadow-xs"
+                  ? "bg-copper text-oncopper shadow-xs"
                   : "border border-line bg-panel text-ink hover:border-copper/70"
               }`}
             >

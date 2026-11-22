@@ -269,8 +269,8 @@ export function AdminIaPage() {
       <PageHeader title="IA Management" subtitle="Configure IA assessments and review or correct marks across the institution." />
 
       <div className="mb-4 flex gap-2">
-        <button onClick={() => setTab("configuration")} className={`rounded-full px-3 py-1.5 text-sm font-medium ${tab === "configuration" ? "bg-copper text-white" : "border border-line text-ink"}`}>Configuration</button>
-        <button onClick={() => setTab("marks")} className={`rounded-full px-3 py-1.5 text-sm font-medium ${tab === "marks" ? "bg-copper text-white" : "border border-line text-ink"}`}>Marks</button>
+        <button onClick={() => setTab("configuration")} className={`rounded-full px-3 py-1.5 text-sm font-medium ${tab === "configuration" ? "bg-copper text-oncopper" : "border border-line text-ink"}`}>Configuration</button>
+        <button onClick={() => setTab("marks")} className={`rounded-full px-3 py-1.5 text-sm font-medium ${tab === "marks" ? "bg-copper text-oncopper" : "border border-line text-ink"}`}>Marks</button>
       </div>
 
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
@@ -332,10 +332,10 @@ export function AdminIaPage() {
                               step="0.5"
                               value={maxMarksDraft}
                               onChange={(e) => setMaxMarksDraft(e.target.value)}
-                              className="w-16 rounded border border-line px-1 py-0.5 text-xs text-ink"
+                              className="w-16 rounded border border-line bg-field px-1 py-0.5 text-xs text-ink"
                               autoFocus
                             />
-                            <button onClick={() => saveMaxMarks(subj.id, n)} className="rounded bg-copper px-1.5 py-0.5 text-[10px] font-medium text-white">Save</button>
+                            <button onClick={() => saveMaxMarks(subj.id, n)} className="rounded bg-copper px-1.5 py-0.5 text-[10px] font-medium text-oncopper">Save</button>
                             <button onClick={() => setEditingAssessment(null)} className="rounded border border-line px-1.5 py-0.5 text-[10px] text-ink">✕</button>
                           </div>
                         ) : (
@@ -391,11 +391,11 @@ export function AdminIaPage() {
                           step="0.5"
                           value={markDraft}
                           onChange={(e) => setMarkDraft(e.target.value)}
-                          className="w-20 rounded-md border border-line px-2 py-1 text-xs text-ink"
+                          className="w-20 rounded-md border border-line bg-field px-2 py-1 text-xs text-ink"
                           autoFocus
                         />
                         <span className="text-xs text-inkmuted">/ {a?.max_marks}</span>
-                        <button onClick={() => confirmMarkEdit(mk, a?.max_marks ?? 0)} className="rounded-md bg-copper px-2.5 py-1 text-xs font-medium text-white">Save</button>
+                        <button onClick={() => confirmMarkEdit(mk, a?.max_marks ?? 0)} className="rounded-md bg-copper px-2.5 py-1 text-xs font-medium text-oncopper">Save</button>
                         <button onClick={() => setEditingMarkId(null)} className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink">Cancel</button>
                       </div>
                     ) : (

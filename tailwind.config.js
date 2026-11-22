@@ -36,6 +36,10 @@ export default {
           light: themed("--color-trace-light"),
         },
         danger: themed("--color-danger"),
+        // Form-field fill and text-on-copper (per-theme; see index.css).
+        // --color-on-copper stays white in Light and on the login page.
+        field: themed("--color-field"),
+        oncopper: themed("--color-on-copper"),
         // Role-accent colors used only on the login page's role
         // selection cards — kept separate from `trace` (which the rest
         // of the app already uses as a general "success/active" color)

@@ -300,7 +300,7 @@ function MobileDayView({
               onClick={() => setActiveDay(d)}
               className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap transition-all ${
                 isActive
-                  ? "bg-copper text-white shadow-xs"
+                  ? "bg-copper text-oncopper shadow-xs"
                   : "border border-line bg-panel text-ink hover:border-copper/70"
               }`}
             >

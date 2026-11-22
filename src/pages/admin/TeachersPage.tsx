@@ -139,12 +139,12 @@ export function TeachersPage() {
             value={searchEmail}
             onChange={(e) => setSearchEmail(e.target.value)}
             placeholder="Search by email…"
-            className="flex-1 rounded-md border border-line px-3 py-2 text-sm focus:border-copper focus:outline-none"
+            className="flex-1 rounded-md border border-line bg-field px-3 py-2 text-sm text-ink focus:border-copper focus:outline-none"
           />
           <button
             type="submit"
             disabled={searching}
-            className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-white hover:bg-copper-dark disabled:opacity-60"
+            className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper hover:bg-copper-dark disabled:opacity-60"
           >
             {searching ? "Searching…" : "Search"}
           </button>
@@ -202,15 +202,15 @@ export function TeachersPage() {
                   {editingId === t.id ? (
                     <>
                       <td className="px-4 py-2">
-                        <input value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full rounded-md border border-line px-2 py-1 text-sm" />
+                        <input value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full rounded-md border border-line bg-field px-2 py-1 text-sm text-ink" />
                       </td>
                       <td className="px-4 py-2 font-mono text-xs text-inkmuted">{t.email}</td>
                       <td className="px-4 py-2">
-                        <input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} className="w-full rounded-md border border-line px-2 py-1 text-sm" />
+                        <input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} className="w-full rounded-md border border-line bg-field px-2 py-1 text-sm text-ink" />
                       </td>
                       <td className="px-4 py-2">
                         <div className="flex gap-1.5">
-                          <button onClick={() => saveEdit(t.id)} disabled={savingEdit} className="rounded-md bg-copper px-2.5 py-1 text-xs font-medium text-white hover:bg-copper-dark disabled:opacity-60">
+                          <button onClick={() => saveEdit(t.id)} disabled={savingEdit} className="rounded-md bg-copper px-2.5 py-1 text-xs font-medium text-oncopper hover:bg-copper-dark disabled:opacity-60">
                             {savingEdit ? "Saving…" : "Save"}
                           </button>
                           <button onClick={() => setEditingId(null)} className="rounded-md border border-line px-2.5 py-1 text-xs text-ink">

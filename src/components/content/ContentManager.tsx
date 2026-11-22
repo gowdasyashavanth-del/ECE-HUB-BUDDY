@@ -376,7 +376,7 @@ export function ContentManager() {
         title="Content"
         subtitle={isAdmin ? "Manage notes, videos, documents, links, assignments and quizzes across all subjects." : "Manage content for the subjects you're assigned to."}
         action={
-          <button onClick={openCreate} className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-white hover:bg-copper-dark">
+          <button onClick={openCreate} className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper hover:bg-copper-dark">
             + Add Content
           </button>
         }
@@ -493,7 +493,7 @@ export function ContentManager() {
               {formError && <p className="mt-3 rounded-md bg-danger/5 px-3 py-2 text-sm text-danger" role="alert">{formError}</p>}
 
               <div className="mt-4 flex gap-2">
-                <button onClick={handleSubmit} disabled={saving} className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-white hover:bg-copper-dark disabled:opacity-60">
+                <button onClick={handleSubmit} disabled={saving} className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper hover:bg-copper-dark disabled:opacity-60">
                   {saving ? "Saving…" : editingId ? "Save changes" : "Create"}
                 </button>
                 <button onClick={() => setFormOpen(false)} className="rounded-md border border-line px-4 py-2 text-sm text-ink hover:border-copper hover:text-copper-dark">

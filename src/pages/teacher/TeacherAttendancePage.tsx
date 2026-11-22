@@ -242,10 +242,10 @@ export function TeacherAttendancePage() {
         <>
           {classSections.length > 0 && (
             <div className="mb-4 flex gap-2">
-              <button onClick={() => { setMode("subject"); setSectionId(""); setSubjectId(""); }} className={`rounded-full px-3 py-1.5 text-sm font-medium ${mode === "subject" ? "bg-copper text-white" : "border border-line text-ink"}`}>
+              <button onClick={() => { setMode("subject"); setSectionId(""); setSubjectId(""); }} className={`rounded-full px-3 py-1.5 text-sm font-medium ${mode === "subject" ? "bg-copper text-oncopper" : "border border-line text-ink"}`}>
                 My Subject Attendance
               </button>
-              <button onClick={() => { setMode("class"); setSectionId(""); setSubjectId(""); }} className={`rounded-full px-3 py-1.5 text-sm font-medium ${mode === "class" ? "bg-copper text-white" : "border border-line text-ink"}`}>
+              <button onClick={() => { setMode("class"); setSectionId(""); setSubjectId(""); }} className={`rounded-full px-3 py-1.5 text-sm font-medium ${mode === "class" ? "bg-copper text-oncopper" : "border border-line text-ink"}`}>
                 My Class (as Class Teacher)
               </button>
             </div>
@@ -300,7 +300,7 @@ const selectCls = "rounded-md border border-line bg-paper px-2.5 py-1.5 text-sm 
 const STATUS_STYLES: Record<Status, string> = {
   present: "bg-trace text-white",
   absent: "bg-danger text-white",
-  late: "bg-copper text-white",
+  late: "bg-copper text-oncopper",
   excused: "bg-inkmuted text-white",
 };
 
@@ -357,7 +357,7 @@ function SubjectRoster({
       {saveResult && <p className="mt-3 rounded-md bg-trace-light px-3 py-2 text-sm text-trace-dark" role="status">{saveResult}</p>}
 
       <div className="sticky bottom-4 mt-4 flex justify-end">
-        <button onClick={onSave} disabled={saving} className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-white shadow-md hover:bg-copper-dark disabled:opacity-50">
+        <button onClick={onSave} disabled={saving} className="rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper shadow-md hover:bg-copper-dark disabled:opacity-50">
           {saving ? "Saving…" : "Save Attendance"}
         </button>
       </div>

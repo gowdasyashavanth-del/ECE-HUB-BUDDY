@@ -264,7 +264,7 @@ function SectionCard({
         </div>
         <button
           onClick={onAssignClick}
-          className="shrink-0 rounded-md bg-copper px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-copper-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper"
+          className="shrink-0 rounded-md bg-copper px-3.5 py-2 text-sm font-medium text-oncopper transition-colors hover:bg-copper-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper"
         >
           + Assign Student
         </button>
@@ -439,7 +439,7 @@ function AssignStudentDialog({
             type="button"
             disabled={!selected || submitting}
             onClick={handleAssign}
-            className="rounded-md bg-copper px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-copper-dark disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper"
+            className="rounded-md bg-copper px-3.5 py-2 text-sm font-medium text-oncopper transition-colors hover:bg-copper-dark disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper"
           >
             {submitting ? "Assigning…" : "Assign Student"}
           </button>

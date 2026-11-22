@@ -177,7 +177,7 @@ export function ClassTeachersPage() {
                       <button
                         onClick={() => confirmAssign(s.id)}
                         disabled={saving}
-                        className="rounded-md bg-copper px-3 py-1.5 text-sm font-medium text-white hover:bg-copper-dark disabled:opacity-50"
+                        className="rounded-md bg-copper px-3 py-1.5 text-sm font-medium text-oncopper hover:bg-copper-dark disabled:opacity-50"
                       >
                         {saving ? "Saving…" : "Save"}
                       </button>

@@ -49,7 +49,7 @@ export function RecommendationCard({ rec, now }: { rec: SmartStudyRecommendation
       {route && (
         <Link
           to={route}
-          className="mt-3 inline-flex min-h-[44px] w-full items-center justify-center rounded-md bg-copper px-4 py-2 text-sm font-medium text-white hover:bg-copper-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper sm:w-auto"
+          className="mt-3 inline-flex min-h-[44px] w-full items-center justify-center rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper hover:bg-copper-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper sm:w-auto"
         >
           {ACTION_LABEL[rec.action_type]} →
         </Link>

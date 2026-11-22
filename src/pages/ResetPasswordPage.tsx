@@ -148,7 +148,7 @@ export function ResetPasswordPage() {
             </p>
             <Link
               to="/login"
-              className="inline-block rounded-md bg-copper px-4 py-2 text-sm font-medium text-white hover:bg-copper-dark"
+              className="inline-block rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper hover:bg-copper-dark"
             >
               Back to login
             </Link>
@@ -191,7 +191,7 @@ export function ResetPasswordPage() {
             <button
               type="submit"
               disabled={submitting}
-              className="w-full rounded-md bg-copper px-4 py-2 text-sm font-medium text-white hover:bg-copper-dark disabled:opacity-60"
+              className="w-full rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper hover:bg-copper-dark disabled:opacity-60"
             >
               {submitting ? "Updating…" : "Update Password"}
             </button>

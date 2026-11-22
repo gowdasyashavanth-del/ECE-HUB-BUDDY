@@ -158,7 +158,7 @@ export function CrDesignationsPage() {
               <option key={s.id} value={s.id}>{s.full_name || s.email}</option>
             ))}
           </select>
-          <button onClick={confirmAssign} disabled={saving} className="rounded-md bg-copper px-3 py-1.5 text-sm font-medium text-white hover:bg-copper-dark disabled:opacity-50">
+          <button onClick={confirmAssign} disabled={saving} className="rounded-md bg-copper px-3 py-1.5 text-sm font-medium text-oncopper hover:bg-copper-dark disabled:opacity-50">
             {saving ? "Saving…" : "Save"}
           </button>
           <button onClick={() => setEditing(null)} className="rounded-md border border-line px-3 py-1.5 text-sm font-medium text-ink">

@@ -11,7 +11,7 @@ export function SmartStudyEntryCard() {
       <p className="mb-3 mt-1 text-sm text-ink">See what needs your attention next.</p>
       <Link
         to="/student/smart-study"
-        className="inline-flex min-h-[44px] items-center rounded-md bg-copper px-4 py-2 text-sm font-medium text-white hover:bg-copper-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper"
+        className="inline-flex min-h-[44px] items-center rounded-md bg-copper px-4 py-2 text-sm font-medium text-oncopper hover:bg-copper-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper"
       >
         Open Smart Study →
       </Link>

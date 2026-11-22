@@ -291,7 +291,7 @@ export function LabBatchesPage() {
                               <button
                                 onClick={() => handleAssign(stu.id, s.id)}
                                 disabled={saving || !pickedBatchByStudent[stu.id]}
-                                className="rounded-md bg-copper px-3 py-1 text-xs font-medium text-white hover:bg-copper-dark disabled:opacity-50"
+                                className="rounded-md bg-copper px-3 py-1 text-xs font-medium text-oncopper hover:bg-copper-dark disabled:opacity-50"
                               >
                                 {currentBatch ? "Change" : "Assign"}
                               </button>
