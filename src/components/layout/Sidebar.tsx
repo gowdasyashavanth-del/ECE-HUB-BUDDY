@@ -2,10 +2,13 @@ import { NavLink } from "react-router-dom";
 import type { UserRole } from "../../lib/types";
 import { TraceDivider } from "../branding/TraceDivider";
 import { ACADEMIC_NAV_ORDER, ENTITY_CONFIGS } from "../../pages/admin/academic/entityConfigs";
+import { useClassTeacher } from "../../contexts/ClassTeacherContext";
 
 interface NavItem {
   to: string;
   label: string;
+  /** Only shown once a successful lookup confirms a current Class Teacher assignment. */
+  requiresClassTeacher?: boolean;
 }
 
 interface NavGroup {
@@ -51,8 +54,8 @@ const NAV_BY_ROLE: Record<UserRole, NavGroup[]> = {
         { to: "/teacher/timetable", label: "My Timetable" },
         { to: "/teacher/attendance", label: "Attendance" },
         { to: "/teacher/ia", label: "IA Marks" },
-        { to: "/teacher/cr", label: "CR1 / CR2" },
-        { to: "/teacher/lab-batches", label: "Lab Batches" },
+        { to: "/teacher/cr", label: "CR1 / CR2", requiresClassTeacher: true },
+        { to: "/teacher/lab-batches", label: "Lab Batches", requiresClassTeacher: true },
         { to: "/teacher/students", label: "Student Performance" },
         { to: "/teacher/content", label: "Content" },
         { to: "/teacher/notes", label: "Notes" },
@@ -112,7 +115,14 @@ const NAV_BY_ROLE: Record<UserRole, NavGroup[]> = {
 };
 
 export function Sidebar({ role, onNavigate }: { role: UserRole; onNavigate?: () => void }) {
-  const groups = NAV_BY_ROLE[role];
+  const { status, isClassTeacher } = useClassTeacher();
+  // Hidden while loading, on error, and for teachers with no current
+  // assignment — shown only after a successful check confirms one.
+  const showClassTeacherItems = status === "ready" && isClassTeacher;
+  const groups = NAV_BY_ROLE[role].map((group) => ({
+    ...group,
+    items: group.items.filter((item) => !item.requiresClassTeacher || showClassTeacherItems),
+  }));
 
   return (
     <nav className="flex min-h-full flex-col gap-4 px-3 py-4 pb-8" aria-label="Main navigation">

@@ -2,7 +2,10 @@ import { Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { isSupabaseConfigured } from "./lib/supabaseClient";
 import { AuthProvider } from "./contexts/AuthContext";
+import { ClassTeacherProvider } from "./contexts/ClassTeacherContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { ClassTeacherRoute } from "./components/ClassTeacherRoute";
+import { ClassTeacherAccessNotice } from "./components/ClassTeacherAccessNotice";
 import { ConfigNeededPage } from "./pages/ConfigNeededPage";
 import { PortalSelectionPage } from "./pages/PortalSelectionPage";
 import { ResetPasswordPage } from "./pages/ResetPasswordPage";
@@ -82,6 +85,7 @@ export default function App() {
 
   return (
     <AuthProvider>
+      <ClassTeacherProvider>
       <PWAInstallCard />
       <PWAUpdateToast />
       <ErrorBoundary>
@@ -237,6 +241,7 @@ export default function App() {
           path="/teacher"
           element={
             <ProtectedRoute allowedRoles={["teacher"]}>
+              <ClassTeacherAccessNotice />
               <TeacherDashboard />
             </ProtectedRoute>
           }
@@ -341,7 +346,9 @@ export default function App() {
           path="/teacher/cr"
           element={
             <ProtectedRoute allowedRoles={["teacher"]}>
-              <TeacherCrPage />
+              <ClassTeacherRoute>
+                <TeacherCrPage />
+              </ClassTeacherRoute>
             </ProtectedRoute>
           }
         />
@@ -349,7 +356,9 @@ export default function App() {
           path="/teacher/lab-batches"
           element={
             <ProtectedRoute allowedRoles={["teacher"]}>
-              <TeacherLabBatchesPage />
+              <ClassTeacherRoute>
+                <TeacherLabBatchesPage />
+              </ClassTeacherRoute>
             </ProtectedRoute>
           }
         />
@@ -585,6 +594,7 @@ export default function App() {
       </Routes>
         </Suspense>
       </ErrorBoundary>
+      </ClassTeacherProvider>
     </AuthProvider>
   );
 }

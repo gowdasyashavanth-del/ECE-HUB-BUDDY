@@ -1,13 +1,12 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { friendlyDbError } from "../../lib/supabaseErrors";
-import { useAuth } from "../../contexts/AuthContext";
+import { useClassTeacher } from "../../contexts/ClassTeacherContext";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { LoadingState } from "../../components/ui/LoadingState";
 import { ErrorState } from "../../components/ui/ErrorState";
 import { EmptyState } from "../../components/ui/EmptyState";
 
-interface Section { id: string; name: string; }
 interface Batch { id: string; name: string; }
 interface Student { id: string; full_name: string; email: string; usn: string | null; }
 interface AssignmentRow { student_id: string; lab_batch_id: string; }
@@ -22,31 +21,17 @@ const first = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v)
 // it's purely a Class Teacher-facing surface for an RPC that already
 // supported this.
 export function TeacherLabBatchesPage() {
-  const { profile } = useAuth();
-  const [sections, setSections] = useState<Section[] | null>(null);
+  // Class-teacher sections come from the shared ClassTeacherProvider
+  // (one lookup per session) instead of a per-page query.
+  const { status: sectionsStatus, sections, error: sectionsError, retry: retrySections } = useClassTeacher();
   const [sectionId, setSectionId] = useState("");
   const [batches, setBatches] = useState<Batch[]>([]);
   const [roster, setRoster] = useState<Student[]>([]);
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
   const [rosterLoading, setRosterLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [savingStudentId, setSavingStudentId] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function loadSections() {
-      if (!supabase || !profile) return;
-      setError(null);
-      const { data, error: err } = await supabase
-        .from("class_teacher_assignments")
-        .select("section_id, sections(name)")
-        .eq("teacher_id", profile.id)
-        .eq("is_current", true);
-      if (err) { setError(friendlyDbError(err, "Your class-teacher sections")); return; }
-      setSections((data ?? []).map((r: any) => ({ id: r.section_id, name: first<{ name: string }>(r.sections)?.name ?? "—" })));
-    }
-    loadSections();
-  }, [profile]);
 
   async function loadRoster(sec: string) {
     if (!supabase) return;
@@ -97,8 +82,8 @@ export function TeacherLabBatchesPage() {
     await loadRoster(sectionId);
   }
 
-  if (error) return <ErrorState message={error} />;
-  if (sections === null) return <LoadingState label="Loading your class-teacher sections…" />;
+  if (sectionsStatus === "error") return <ErrorState message={sectionsError ?? "Couldn't load your class-teacher sections."} onRetry={retrySections} />;
+  if (sectionsStatus !== "ready") return <LoadingState label="Loading your class-teacher sections…" />;
 
   return (
     <div>
