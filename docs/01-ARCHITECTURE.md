@@ -1,6 +1,6 @@
 # ECE Hub Buddy — Master Project Architecture
 
-> **Source baseline:** GitHub `main` @ `6d557533a7c26da3fc668ae7e6d1233148129e4c` (verified 2026-11-19).
+> **Source baseline:** GitHub `main` @ `a5c8b3e97c72066119eb6a76db4387c6e3d00566` (verified 2026-11-27; the migration inventory is unchanged since `6d55753`).
 > **Evidence tags:** **[V]** verified in tracked source at the baseline SHA · **[O]** stated by the project owner · **[R]** reported by an existing untracked report, not re-verified here · **[H]** historical · **[A]** assumption · **[U]** unresolved / unverified.
 
 ---
@@ -28,14 +28,15 @@ Versions below are the ranges in `package.json`; exact pins are in `package-lock
 | UI framework | React `^18.3.1`, TypeScript `^5.5.3` |
 | Build | Vite `^5.4.1`, `@vitejs/plugin-react` |
 | Styling | Tailwind CSS `^3.4.13`, PostCSS, Autoprefixer |
+| Theming | Three themes (`light`, `dark`, `eyecare`) chosen through `ThemeContext` and applied as a `data-theme` attribute on the `AppShell` wrapper. Colours are CSS variables in `src/index.css`, including form-control tokens (`--color-field*`, `--color-on-copper`), a per-theme `color-scheme`, and a zero-specificity form-control base layer (added in `85d4326`). The login and portal-selection pages sit outside `[data-theme]` and stay light. **[V]** |
 | Routing | React Router `^6.26.2` (`BrowserRouter` in the normal build, `HashRouter` in the single-file build) |
 | Backend | Supabase via `@supabase/supabase-js ^2.45.4` — Auth, Postgres (RLS + RPCs), Storage, one Edge Function |
 | PWA | `vite-plugin-pwa ^0.21.2` (normal build only) |
 | Single-file build | `vite-plugin-singlefile ^2.3.3` |
 | Tooling | ESLint 8 (`npm run lint`), `tsc` typecheck (`npm run typecheck`) |
-| Tests | **No application test runner.** SQL test scripts exist under `supabase/tests/` (see `04-DEVELOPMENT-AND-DEPLOYMENT.md`). |
-| CI | **None in the repository** (no `.github/` directory). |
-| Node version | Not pinned (`package.json` has no `engines` field; no `.nvmrc`). **[U]** which Node version is intended |
+| Tests | **Vitest 3 + jsdom + Testing Library** (dev dependencies only): unit and component tests in `src/**/*.test.ts(x)`, run with `npm test`. Every Supabase call in them is mocked; they exercise authentication helpers, route guards, Class Teacher visibility and timetable logic, not the database. SQL test scripts under `supabase/tests/` remain manual (see `04-DEVELOPMENT-AND-DEPLOYMENT.md`). **[V]** |
+| CI | GitHub Actions workflow `.github/workflows/ci.yml`: `npm ci --ignore-scripts` → typecheck → lint → test → build on pull requests and on pushes to `main`; read-only token permissions, no secrets, no deploy step, no persisted checkout credentials, and superseded runs cancelled for pull requests only. **[V]** That it passes on GitHub has not been observed (see `05-PROJECT-STATUS-AND-KNOWN-ISSUES.md` §11). |
+| Node version | Not pinned (`package.json` has no `engines` field; no `.nvmrc`). **[U]** which Node version is intended. The CI workflow runs Node 22, the version it was developed against. |
 
 ## 3. System overview
 
@@ -57,20 +58,23 @@ Key design property **[V]**: there is no custom application server. Authorizatio
 
 ```
 index.html, index.singlefile.html     entry HTML (normal / single-file)
-vite.config.ts, vite.config.singlefile.ts, vercel.json
+vite.config.ts, vite.config.singlefile.ts, vitest.config.ts, vercel.json
+.github/workflows/ci.yml            CI: typecheck, lint, test, build
 public/                               favicons, PWA icons (192, 512, maskable, apple-touch)
 src/
   main.tsx                            BrowserRouter entry
   main.singlefile.tsx                 HashRouter entry (portable build)
   App.tsx                             route table, lazy-loaded pages, global PWA UI
-  contexts/                           AuthContext, ThemeContext
+  contexts/                           AuthContext, ClassTeacherContext, ThemeContext
   hooks/                              useDebounce, usePWAInstall, usePWAUpdate
   lib/                                supabaseClient, analytics, planner, globalSearch, study,
                                       smartStudy, posterUpload, passwordChange, timetable*, …
   components/                         account, admin, analytics, branding, content, layout, planner,
-                                      pwa, search, smartstudy, study, ui, ProtectedRoute
+                                      pwa, search, smartstudy, study, ui, ProtectedRoute,
+                                      ClassTeacherRoute, ClassTeacherAccessNotice
   pages/                              top-level (portal selection/login, profile, reset password),
                                       student/, teacher/, admin/
+  test/                               shared test setup; *.test.ts(x) files sit beside the code they test
 supabase/
   config.toml                         local Supabase CLI configuration
   migrations/                         59 SQL migrations + 00_MIGRATION_PLAN.md
@@ -89,6 +93,8 @@ supabase/
 - **Session and profile:** `AuthContext` calls `getSession` / `onAuthStateChange`, then reads the caller's row from `public.users` (`id, email, full_name, phone, role, xp, streak, avatar_url, usn, created_at`). The role always comes from the database, never from browser storage.
 - **Per-role login:** `/student/login`, `/teacher/login`, `/admin/login` render one `PortalLoginPage` with `expectedRole`. If the signed-in account's role differs, the page signs the user out and tells them which portal to use.
 - **Route guard:** `ProtectedRoute` redirects unauthenticated users to `/login` and wrong-role users to their own dashboard. Its source comment states it is a UX layer only.
+- **Class Teacher access (PR #13) [V]:** `ClassTeacherProvider` (`contexts/ClassTeacherContext.tsx`) is mounted once in `App.tsx`, inside `AuthProvider` and outside every route layout, so it is not remounted on navigation. For teachers only, it reads `class_teacher_assignments` where `teacher_id` is the signed-in profile id and `is_current` is true, and exposes `status` (`idle` / `loading` / `ready` / `error`), `sections`, `isClassTeacher` and `retry`. It clears on sign-out and on a profile change, and a query that returns an error becomes an error state, never access. A query that *throws* instead of returning an error currently leaves the provider on "loading" (access is still never granted; see `05-PROJECT-STATUS-AND-KNOWN-ISSUES.md` §11.3).
+- **Class Teacher route guard [V]:** `ClassTeacherRoute` wraps exactly `/teacher/cr` and `/teacher/lab-batches`, inside `ProtectedRoute`. It shows a loading state while checking, an error with a Retry action if the check fails, and redirects a teacher with no current assignment to `/teacher`, where `ClassTeacherAccessNotice` explains why. `Sidebar` hides the same two links unless the check succeeded and found an assignment. This is a UX layer only: RLS (`class_teacher_assignments_select`) and the RPCs remain the authorization boundary, and Super Admin has its own `/admin/cr-designations` and `/admin/lab-batches` pages.
 - **Password flows:** self-service change (`lib/passwordChange.ts`, shared with the recovery form) and email recovery at `/reset-password`. Supabase Auth is the only password authority.
 
 ## 6. Roles and modules
@@ -117,7 +123,7 @@ README additionally states that a student who is a Class Representative (CR) can
 
 `/teacher` (dashboard), `/teacher/assignments/:assignmentId` (subject workspace), `content`, `notes`, `formulas`, `questions`, `tests`, `results`, `students`, `my-students`, `timetable`, `attendance`, `ia`, `cr`, `lab-batches`, `announcements`, `planner`, `analytics`, `profile`.
 
-CR designations and lab batches are managed by a class teacher (README); the assignment RPCs are in `02-DATABASE-AND-MIGRATIONS.md`.
+CR designations and lab batches are managed by a class teacher (README). The `cr` and `lab-batches` pages and their sidebar links are available only to teachers with a current Class Teacher assignment (§5); the assignment RPCs are in `02-DATABASE-AND-MIGRATIONS.md`.
 
 ### 6.3 Super admin (`/admin/*`)
 
@@ -211,5 +217,5 @@ No client code reads these tables: `reels`, `reel_bookmarks`, `reel_watch_histor
 ## 11. Documented-but-unverified architecture statements
 
 - Production hosting, domain and Auth site/redirect URLs **[U]**.
-- Exact end-to-end behaviour of every module (no application tests; no browser run in this review) **[U]**.
+- Exact end-to-end behaviour of every module (the application tests are mocked unit/component tests, not end-to-end; no run against a real Supabase project in this review) **[U]**.
 - Whether the single-file build is still used operationally **[U]**.

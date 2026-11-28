@@ -1,6 +1,6 @@
 # ECE Hub Buddy — Project Documentation Index
 
-> **Source baseline:** GitHub `main` @ `6d557533a7c26da3fc668ae7e6d1233148129e4c` (verified 2026-11-19).
+> **Source baseline:** GitHub `main` @ `a5c8b3e97c72066119eb6a76db4387c6e3d00566` (verified 2026-11-27). The migration inventory and the database counts in `02`/`03` were derived at `6d55753` and re-checked on 2026-11-27: no file under `supabase/` differs between `6d55753` and `a5c8b3e`.
 
 This folder holds the reference documentation for ECE Hub Buddy, an ECE-only portal for BGSIT Autonomous. The root `README.md` remains the concise project introduction and quick-start guide; these documents go deeper.
 
@@ -12,7 +12,7 @@ This folder holds the reference documentation for ECE Hub Buddy, an ECE-only por
 | [`02-DATABASE-AND-MIGRATIONS.md`](02-DATABASE-AND-MIGRATIONS.md) | All 59 migrations by exact filename, numbering conflicts, tables, functions, triggers, policies, storage, Migration 20 and 21 facts, rollback status, and the separate evidence classes for production |
 | [`03-SECURITY-AND-ACCESS-CONTROL.md`](03-SECURITY-AND-ACCESS-CONTROL.md) | Authentication, role guard, RLS overview, function security in three separate layers, the Edge Function, storage security, open security questions |
 | [`04-DEVELOPMENT-AND-DEPLOYMENT.md`](04-DEVELOPMENT-AND-DEPLOYMENT.md) | Local development, configuration, builds, deployment architecture, test assets, git workflow evidence, approval gates |
-| [`05-PROJECT-STATUS-AND-KNOWN-ISSUES.md`](05-PROJECT-STATUS-AND-KNOWN-ISSUES.md) | Verified work, Migration 20/21 status, untracked local material, documentation-conflict ledger, unresolved decisions, unverified facts |
+| [`05-PROJECT-STATUS-AND-KNOWN-ISSUES.md`](05-PROJECT-STATUS-AND-KNOWN-ISSUES.md) | Verified work, Migration 20/21 status, untracked local material, documentation-conflict ledger, unresolved decisions, unverified facts, and the 2026-11-27 project-health review (timetable branches, Migration 21 rollback analysis, helper-function ACLs, leaked-password protection, test and CI status) |
 
 Suggested reading order: 05 → 02 → 03 → 01 → 04.
 

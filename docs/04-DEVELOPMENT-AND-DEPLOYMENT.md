@@ -1,6 +1,6 @@
 # ECE Hub Buddy — Development and Deployment Guide
 
-> **Source baseline:** GitHub `main` @ `6d557533a7c26da3fc668ae7e6d1233148129e4c`.
+> **Source baseline:** GitHub `main` @ `a5c8b3e97c72066119eb6a76db4387c6e3d00566` (verified 2026-11-27; the migration inventory is unchanged since `6d55753`).
 > **Tags:** **[V]** verified in tracked source · **[O]** owner-stated · **[R]** reported by an existing untracked report, not re-verified · **[H]** historical statement in an existing document · **[A]** assumption · **[U]** unresolved / unverified.
 >
 > This is a *reference*, not an operations runbook. Nothing here authorizes running SQL against production, changing Supabase settings, pushing, or deploying; each of those needs explicit owner approval (§9). No secret values appear; variable **names** only.
@@ -36,12 +36,13 @@ If either is unset the app renders a "configuration needed" screen (`ConfigNeede
 |---|---|
 | `npm run dev` | Vite dev server |
 | `npm run typecheck` | `tsc --noEmit -p tsconfig.app.json` |
-| `npm run lint` | ESLint on `ts,tsx` (not mentioned in the README) |
+| `npm run lint` | ESLint on `ts,tsx` |
+| `npm test` | Vitest run: unit and component tests, all Supabase access mocked (`npm run test:watch` for watch mode) |
 | `npm run build` | Production build to `dist/` |
 | `npm run preview` | Serve the build locally |
 | `npx vite build -c vite.config.singlefile.ts` | Portable single HTML (`dist-singlefile/index.singlefile.html`), HashRouter, no service worker; serve over a local HTTP server for phone testing |
 
-There is **no application test runner and no CI** in the repository. **[V]**
+`npm test` runs the Vitest suite (§6). `.github/workflows/ci.yml` runs `npm ci --ignore-scripts`, typecheck, lint, test and build on every pull request and every push to `main`. It has read-only token permissions, no secrets and no deploy step; the checkout does not persist credentials; install scripts are disabled (only `esbuild` and `fsevents`, both dev-only, have any, and the pipeline passes without them); and superseded runs are cancelled for pull requests only, so a run on `main` is never cancelled. **[V]**
 
 ## 3. Supabase backend setup (reference)
 
@@ -95,6 +96,22 @@ These are **local** settings; they do not describe production.
 
 ## 6. Testing assets **[V]**
 
+### 6.1 Application tests (Vitest)
+Run with `npm test`. Configuration is `vitest.config.ts` (separate from `vite.config.ts`, so the production build is untouched) and `src/test/setup.ts`. When this was written: 8 files, 67 tests, all passing; every Supabase call is mocked and no network or real project is used. `package.json` carries an npm `overrides` entry pinning `tinypool` to 2.1.2 to avoid two critical advisories in the version Vitest 3.2.7 would otherwise install (`05-PROJECT-STATUS-AND-KNOWN-ISSUES.md` §11.4).
+
+| Test file | Covers |
+|---|---|
+| `src/lib/passwordChange.test.ts` | Password validation and the self-service / recovery flows against a fake auth client: current password re-verified first, friendly error mapping, no raw provider text, failure paths |
+| `src/components/ProtectedRoute.test.tsx` | Route guard: loading, signed-out redirect, profile error fails closed, wrong role redirected to own dashboard, Super Admin kept out of teacher routes |
+| `src/contexts/ClassTeacherContext.test.tsx` | Class Teacher lookup (table, columns, `teacher_id` + `is_current` filter), loading / ready / error / retry, no query for other roles, no refetch on same-teacher refresh, stale-result reset after sign-out and between teachers, late responses discarded |
+| `src/components/ClassTeacherRoute.test.tsx`, `ClassTeacherAccessNotice.test.tsx` | Direct-URL protection for `/teacher/cr` and `/teacher/lab-batches`; redirect notice shown once and cleared |
+| `src/components/layout/Sidebar.test.tsx` | Exactly the two Class Teacher links are hidden unless the check succeeded; all other teacher links and the Super Admin / student menus are unaffected |
+| `src/lib/timetableValidation.test.ts`, `timeFormat.test.ts` | Timetable clash rules (section, teacher, room, lab batches), student/teacher filtering, 12-hour formatting |
+
+Not covered: behaviour against a real Supabase project (RLS, RPCs, Edge Function), visual/theming behaviour, and end-to-end browser flows. The mutation checks run when these were written (deliberately breaking a guard and confirming a test fails) were manual and are not part of the repository.
+
+### 6.2 SQL test scripts (manual)
+
 | File | Notes |
 |---|---|
 | `supabase/tests/assignment_concurrency_test.sql` | Migration 21 suite: executable single-transaction regression section (9 groups, ends in `ROLLBACK`) + commented manual two-session scenarios and teardown |
@@ -105,9 +122,9 @@ How these were run: against an **isolated local database** with non-production f
 
 ## 7. Git workflow evidence **[V]**
 
-- 41 commits on `main`. Migrations 20 and 21 were committed directly on `main` (`5b24d09`, `6d55753`); no pull request is associated with them.
-- Pull requests #1–#12: `main`'s history contains a commit titled "Merge pull request #N from …" for each of #1 through #12, and each PR's head commit (`refs/pull/N/head`) is an ancestor of `main`. That is git-level evidence consistent with all twelve having been merged; the table is in `05-PROJECT-STATUS-AND-KNOWN-ISSUES.md` §1. GitHub's own per-PR status field and the PR discussion threads were **not** read (the GitHub API was rate-limited and the PR pages could not be parsed). **[U]** No `refs/pull/` entries exist beyond #12.
-- No branch protection, CI, or commit-message convention is documented in the repository. **[U]**
+- 45 commits on `main` at `a5c8b3e` (2026-11-25). Migrations 20 and 21 were committed directly on `main` (`5b24d09`, `6d55753`); no pull request is associated with them. Since `6d55753`: `f8acac6` (documentation set, 2026-11-21) and `85d4326` (form-field readability across themes, 2026-11-22) were committed directly; PR #13 (`feat/class-teacher-nav-visibility`, head `39dab96`) was merged as `a5c8b3e` on 2026-11-25.
+- Pull requests #1–#13: `main`'s history contains a commit titled "Merge pull request #N from …" for each of #1 through #13, and each PR's head commit (`refs/pull/N/head`) is an ancestor of `main`. That is git-level evidence consistent with all thirteen having been merged; the table is in `05-PROJECT-STATUS-AND-KNOWN-ISSUES.md` §1. GitHub's own per-PR status field and the PR discussion threads were **not** read (the GitHub API was rate-limited and the PR pages could not be parsed). **[U]** No `refs/pull/` entries exist beyond #13.
+- Branch protection and a commit-message convention are not documented in the repository **[U]**. A CI workflow exists (§2) but has not been observed running on GitHub **[U]**. Remote branches: only `main` carries unique work; every other remote branch is an ancestor of `main`, except `feature/notes-module-chapter`, whose one extra commit is patch-equivalent to `a386a51` already on `main` (`05-PROJECT-STATUS-AND-KNOWN-ISSUES.md` §11.1). **[V]**
 - Line endings: files are stored with LF; a Windows working copy shows CRLF. There is no `.gitattributes`. **[V]**
 
 ## 8. Environment hygiene
@@ -124,7 +141,7 @@ Do not, without explicit owner approval: execute production SQL; change Supabase
 
 ## 10. Unverified operational facts
 
-- Intended Node version; CI expectations.
+- Intended Node version (CI uses 22); whether the CI workflow passes on GitHub.
 - Production host, domain, Auth redirect URLs.
 - Edge Function deployment command and `verify_jwt` state.
 - Whether the portable single-file build is used in practice.
