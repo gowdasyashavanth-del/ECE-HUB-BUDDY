@@ -1,0 +1,65 @@
+# Continuous integration for ECE Hub Buddy.
+#
+# Runs the same four checks a developer runs locally, in the same order:
+#   npm run typecheck -> npm run lint -> npm test -> npm run build
+#
+# Safety notes
+#  - Read-only: `contents: read` only. This workflow never pushes, deploys,
+#    or publishes anything.
+#  - No secrets and no Supabase access. The tests mock every Supabase call,
+#    and the production build does not need VITE_SUPABASE_* to succeed (the
+#    app shows its "configuration needed" screen when they are unset).
+#  - The checkout token is not left on disk (`persist-credentials: false`).
+#  - Dependency install scripts are disabled (`npm ci --ignore-scripts`). Only
+#    esbuild and fsevents (both dev-only) have install scripts, and typecheck,
+#    lint, tests and build all pass without them.
+#  - Lint currently reports warnings (react-hooks/exhaustive-deps) but no
+#    errors; only errors fail the job. Fix or accept warnings separately.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  # Pull-request runs live in their own group (the ref is refs/pull/<n>/merge),
+  # so they can never cancel a run on main. Superseded runs are cancelled for
+  # pull requests only; every push to main is allowed to finish.
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    name: Typecheck, lint, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          # The repo does not pin a Node version (see docs/04). 22 is the
+          # version this workflow was developed and verified against.
+          node-version: 22
+          cache: npm
+
+      - name: Install (exact lockfile, no install scripts)
+        run: npm ci --ignore-scripts
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit and component tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build

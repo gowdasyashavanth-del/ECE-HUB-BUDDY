@@ -7,7 +7,8 @@ in the application.
 
 ## Tech stack
 React 18, TypeScript, Vite 5, Tailwind CSS 3, React Router 6 (HashRouter in the single-file build),
-Supabase (Auth, Postgres, Row Level Security, Storage) via `@supabase/supabase-js`.
+Supabase (Auth, Postgres, Row Level Security, Storage) via `@supabase/supabase-js`. Tests: Vitest +
+Testing Library.
 
 ## Setup
 ```bash
@@ -24,15 +25,20 @@ If they are unset the app shows a "configuration needed" screen. Never add a ser
 client code.
 
 ## Commands
-`npm run typecheck` · `npm run build` (output `dist/`) · `npx vite build -c vite.config.singlefile.ts`
-(portable single HTML file, `dist-singlefile/index.singlefile.html`, HashRouter; serve over a local
-HTTP server for phone testing). There is no automated test runner in this repo.
+`npm run typecheck` · `npm run lint` · `npm test` · `npm run build` (output `dist/`) ·
+`npx vite build -c vite.config.singlefile.ts` (portable single HTML file,
+`dist-singlefile/index.singlefile.html`, HashRouter; serve over a local HTTP server for phone
+testing). `npm test` runs the Vitest unit and component tests (Supabase calls are mocked); the SQL
+test scripts under `supabase/tests/` are run manually. GitHub Actions CI
+(`.github/workflows/ci.yml`) runs typecheck, lint, test and build on pull requests and pushes to `main`.
 
 ## Supabase configuration
-Apply every file in `supabase/migrations/` in filename order to a fresh project (numbered `01`–`19`
-first, then timestamped files). Create the first super admin through the bootstrap flow
+Apply every SQL migration file in `supabase/migrations/` in filename order to a fresh project (the SQL files are named
+`<timestamp>_<label>.sql`; filename order is the apply order, and the numbers inside labels are not
+the ordering key). Do not apply `00_MIGRATION_PLAN.md`; it is documentation. Create the first super admin through the bootstrap flow
 (`19_first_super_admin_bootstrap`), which only works while zero super admins exist. Storage buckets:
-`avatars` (public, intentional), `content-files` (private; used for content files and notes). In
+`avatars` (public, intentional), `content-files` (private; used for content files and notes),
+`posters` (private; event and announcement posters). In
 Auth settings, consider enabling leaked-password protection. Deploy the `admin-create-user` Edge
 Function (`supabase/functions/admin-create-user/`) with `verify_jwt` enabled — it is the only place
 the service-role key is used, to create real Auth accounts for the User Management feature.
@@ -52,7 +58,8 @@ notes), Formula Hub, Tests (server-side scoring), Results, Timetable, Attendance
 Announcements (CRs can compose for their section), Profile/avatar, Global Search.
 **Teacher:** My Subjects workspace, Content, Notes, Formulas, Questions, Tests, Results, Planner
 (own subject+section scope), Analytics, My Students, Student Performance, Timetable, Attendance, IA
-Marks, CR management and Lab Batches (class teacher), Announcements, Profile.
+Marks, CR management and Lab Batches (shown only to teachers with a current Class Teacher
+assignment), Announcements, Profile.
 **Super Admin:** User Management (creates real Student/Teacher Supabase Auth accounts, profiles and
 academic/teaching assignments in one step, via the `admin-create-user` Edge Function), Academic
 Structure CRUD, Students, Teachers, Student and Teacher Assignments,
@@ -104,7 +111,8 @@ directly rather than the plugin's `virtual:pwa-register` module, which failed to
 project's Vite/Rollup combination.
 
 ## Known limitations
-No automated test suite in the repo; no self-signup (accounts are created by an admin in Supabase);
+No end-to-end or database tests in CI (the Vitest suite mocks Supabase; SQL tests under
+`supabase/tests/` are manual); no self-signup (accounts are created by an admin in Supabase);
 no server-side email flows beyond Supabase Auth defaults; some SECURITY DEFINER helper/trigger
 functions retain default `anon` EXECUTE (harmless without a session, flagged by Supabase advisors);
 `supabase/notes_module_rls_verification*.sql` are manual verification scripts.

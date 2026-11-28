@@ -1,6 +1,6 @@
 # ECE Hub Buddy — Database and Migration Reference
 
-> **Source baseline:** GitHub `main` @ `6d557533a7c26da3fc668ae7e6d1233148129e4c`.
+> **Source baseline:** GitHub `main` @ `a5c8b3e97c72066119eb6a76db4387c6e3d00566` (verified 2026-11-27). Everything database-related here was derived at `6d55753` and re-checked on 2026-11-27: no file under `supabase/` differs between `6d55753` and `a5c8b3e`.
 > **Tags:** **[V]** verified in tracked source · **[O]** owner-stated · **[R]** reported by an existing untracked report, not re-verified · **[H]** historical · **[A]** assumption · **[U]** unresolved.
 >
 > **Method note [V]:** counts and the "final" object lists below come from a *static, in-order replay of the SQL text* of all 59 migrations (create/drop of tables, policies, triggers, functions). It does not run SQL. Objects created inside dynamic SQL (`EXECUTE`/`DO` blocks), manual dashboard changes, or production drift would not appear. The live production catalog was **not** inspected for this document.
@@ -189,9 +189,18 @@ Permissions: the file contains no GRANT/REVOKE; it relies on `CREATE OR REPLACE`
 
 ### 5.3 Rollback status — **Migration 21 has no rollback migration or script in the repository** **[V]**
 - The only file in `supabase/rollback/` is `20261021000000_assignment_system_reliability.rollback.sql` (for a different migration).
-- That script predates Migration 21 (its last commit precedes it). Whether it is safe to run on a database where Migration 21 is applied is **[U]** and should not be assumed.
+- That script predates Migration 21 (its last commit precedes it). The static analysis in §5.3.1 shows it is **not** safe to run on a database or application at the current version.
 - Existing reports recommend writing a rollback script; none exists in the tracked tree. **[R]**
 - For orientation only: the pre-Migration-21 definitions of the four functions are in `20261021000000_assignment_system_reliability.sql` (`assign_student_to_section`, `end_class_teacher`, `trg_handle_user_role_change`) and `20260912064843_academic_operations_foundation.sql` (`assign_class_teacher`, and the dropped policy). This is a pointer, not a rollback plan.
+
+#### 5.3.1 Static rollback analysis (read-only, 2026-11-27) **[V static]**
+Nothing here was executed, and no rollback SQL was written.
+
+- **What Migration 21 changes:** four `CREATE OR REPLACE FUNCTION` statements (A–D) and one `DROP POLICY IF EXISTS` (E). It creates, alters or removes no table, column, index, trigger attachment or grant, and it reads or writes no row data.
+- **Data-loss risk:** none of the five statements touches row data, so applying or reverting it cannot lose data by itself. The partial unique index `class_teacher_assignments_one_current_per_section` (`20260912064843_academic_operations_foundation.sql`, line 116) is unaffected either way and remains the backstop against two current class teachers for one section. `CREATE OR REPLACE` preserves existing ACLs in both directions.
+- **What reverting would re-open:** (1) recreating `class_teacher_assignments_write_admin_only` (original at `20260912064843…`, lines 159–160: `for all using (is_admin()) with check (is_admin())`) re-allows direct admin INSERT/UPDATE/DELETE on the table, bypassing the RPCs; (2) restoring the earlier function bodies removes the row locks that close the first-time-assignment race and the ordered-lock hierarchy documented in the Migration 21 header.
+- **The existing rollback script is not a substitute.** `supabase/rollback/20261021000000_assignment_system_reliability.rollback.sql` was written for a different migration and does not mention Migration 21. Applied after it, the script would drop `reassign_student_to_section`, `end_class_teacher` and `trg_handle_user_role_change` (with its trigger), and overwrite `assign_student_to_section` with the version from before that migration, while leaving Migration 21's dropped policy dropped. The application calls `reassign_student_to_section` (`StudentAssignmentsPage`, `UserManagementPage`) and `end_class_teacher` (`ClassTeachersPage`) today, so running the script against a database serving the current application would break those screens and stop role-change cleanup of class-teacher assignments.
+- **Consequence:** any rollback of Migration 21 needs a purpose-written, reviewed and tested script (against an isolated database), and a decision on whether a forward fix is preferable. That is an owner decision (`05-PROJECT-STATUS-AND-KNOWN-ISSUES.md` §7, item 1).
 
 ### 5.4 Tests **[V]**
 `supabase/tests/assignment_concurrency_test.sql` (1,567 lines): an executable single-transaction regression section (9 test groups, ends in `ROLLBACK`) plus commented manual procedures for five two-session concurrency scenarios and a scoped teardown. Two other test scripts cover the earlier reliability migration.
